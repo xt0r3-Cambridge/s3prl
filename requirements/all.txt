@@ -31,3 +31,7 @@ pydantic
 sed_eval
 more_itertools
 tensorboard
+flashlight-text
+einops
+speechbrain 
+pyctcdecode
