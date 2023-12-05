@@ -158,7 +158,7 @@ class DownstreamExpert(nn.Module):
         l2_labels: torch.FloatTensor,
         l1_lengths: torch.LongTensor,
         l2_lengths: torch.LongTensor,
-        records: Dict[List[any]],
+        records: Dict[str, List[any]],
         **kwargs,
     ):
         """
@@ -369,7 +369,7 @@ class DownstreamExpert(nn.Module):
 
     # Interface
     def log_records(
-        self, split: str, records: Dict[List[any]], logger, global_step: int, **kwargs
+        self, split: str, records: Dict[str, List[any]], logger, global_step: int, **kwargs
     ):
         """
         Args:
