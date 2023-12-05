@@ -150,7 +150,6 @@ class DownstreamExpert(nn.Module):
             records = records,
         )
     """
-
     def forward(
         self,
         split: str,
@@ -213,10 +212,7 @@ class DownstreamExpert(nn.Module):
         l1_preds = self.l1_model(features)
         l2_preds = self.l2_model(features)
 
-        # print(f'feature shape: {features.shape}')
-        # print(feature_lengths.shape)
-        # print(l1_preds.shape)
-
+        # Compute the loss for both models
         l1_loss = self.objective(l1_preds, l1_labels, feature_lengths, l1_lengths)
         l2_loss = self.objective(l2_preds, l2_labels, feature_lengths, l2_lengths)
 
@@ -230,7 +226,7 @@ class DownstreamExpert(nn.Module):
 
         # Decode the label sequence from the predictions
         # Note: we are using a greedy decoding algorithm here
-        # This is the case, as the non-greedy algos are slow and 
+        # This is the case, as the non-greedy algos are slow and
         # I have not managed to find algos that run on the GPU that do the decoding
         # TODO: see if there are any CTC decoding algos that run on the GPU
         relative_l1_lengths = [
@@ -298,7 +294,7 @@ class DownstreamExpert(nn.Module):
         #       - true negatives: the phones understood by both speakers
         #       - false positives: the phones not understood by anyone
         #       - false negatives: the phones understood by the L1 speaker, but not by the L2 speaker
-        
+
         l1_pred_stats = wer_details_for_batch(
             ids=range(len(true_l1_phones)),
             refs=true_l1_phones,
@@ -371,50 +367,10 @@ class DownstreamExpert(nn.Module):
 
         return loss
 
-        print(pred_l2_phones)
-        assert False
-
-        # TODO: remove code below if deemed necessary. These are an alternative way of computing
-        # WER scores
-
-        for pred_l1, true_l1, len_l1, pred_l2, true_l2, len_l2 in zip(
-            pred_l1_phones,
-            true_l1_phones,
-            l1_lengths,
-            pred_l2_phones,
-            true_l2_phones,
-            l2_lengths,
-        ):
-            assert (
-                len_l1 == len_l2
-            ), f"Length mismatch between l1 and l2 labels: {len_l1} and {len_l2}"
-            # records['l1_acc'].append((pred_l1[:len_l1] == true_l1[:len_l1]).sum() / len_l1)
-            records["l1_wer"].append(edit_distance(true_l1[:len_l1], pred_l1) / len_l1)
-            # records['l2_acc'].append((pred_l2[:len_l2] == true_l2[:len_l2]).sum() / len_l2)
-            records["l2_wer"].append(edit_distance(true_l2[:len_l2], pred_l2) / len_l2)
-            # print(true_l2[:len_l2])
-            # print(pred_l2)
-            # Problem:
-            # pred_mismatch = pred_l1_phones != pred_l2_phones
-            # true_mismatch = true_l1_phones != true_l2_phones
-            # records['mdd_acc'].append((pred_mismatch[:len_l1] == true_mismatch[:len_l2]).sum() / len_l1)
-            # records['mdd_wer'].append(edit_distance(pred_mismatch[:len_l1], true_mismatch[:len_l2]) / len_l1)
-
-        # TODO: correctly decode l1_preds using a CTC decoder
-        # predicted_mismatch = l1_preds.max(dim=-1).indices != l2_preds.max(dim=-1).indices
-        # true_mismatch = l1_labels != l2_labels
-        # sames = predicted_classid == labels
-        # for s, l in zip(sames, lengths):
-        #     utter_result = s[:l].tolist()
-        #     records["acc"] += utter_result
-        #     records["sample_wise_metric"] += [
-        #         torch.FloatTensor(utter_result).mean().item()
-        #     ]
-
-        return loss
-
-    # interface
-    def log_records(self, split: str, records: Dict[List[any]], logger, global_step: int, **kwargs):
+    # Interface
+    def log_records(
+        self, split: str, records: Dict[List[any]], logger, global_step: int, **kwargs
+    ):
         """
         Args:
             records:
@@ -455,26 +411,7 @@ class DownstreamExpert(nn.Module):
             avg_metric = torch.FloatTensor(records[metric]).mean().item()
             logger.add_scalar(f"{prefix}{metric}", avg_metric, global_step=global_step)
             message_parts.append(f"{metric}:{avg_metric}")
-        # avg_l1_acc = torch.FloatTensor(records["l1_acc"]).mean().item()
-        # avg_l2_acc = torch.FloatTensor(records["l2_acc"]).mean().item()
-        # avg_l1_wer = torch.FloatTensor(records["l1_wer"]).mean().item()
-        # avg_l2_wer = torch.FloatTensor(records["l2_wer"]).mean().item()
-        # avg_precision = torch.FloatTensor(records["precision"]).mean().item()
-        # avg_recall = torch.FloatTensor(records["recall"]).mean().item()
-        # avg_recall = torch.FloatTensor(records["recall"]).mean().item()
-        # avg_mdd_acc = torch.FloatTensor(records["mdd_acc"]).mean().item()
-        # avg_mdd_wer = torch.FloatTensor(records["mdd_wer"]).mean().item()
 
-        # logger.add_scalar(f"{prefix}loss", avg_loss, global_step=global_step)
-        # # logger.add_scalar(f"{prefix}l1_acc", avg_l1_acc, global_step=global_step)
-        # logger.add_scalar(f"{prefix}l1_wer", avg_l1_wer, global_step=global_step)
-        # # logger.add_scalar(f"{prefix}l2_acc", avg_l2_acc, global_step=global_step)
-        # logger.add_scalar(f"{prefix}l2_wer", avg_l2_wer, global_step=global_step)
-        # logger.add_scalar(f"{prefix}precision", avg_l2_wer, global_step=global_step)
-        # logger.add_scalar(f"{prefix}mdd_acc", avg_mdd_acc, global_step=global_step)
-        # logger.add_scalar(f"{prefix}mdd_wer", avg_mdd_wer, global_step=global_step)
-        # message = f"{prefix}|step:{global_step}|loss:{avg_loss}|mdd_acc:{avg_mdd_acc}|mdd_wer:{avg_mdd_wer}|l1_acc:{avg_l1_acc}|l1_wer:{avg_l1_wer}|l2_acc:{avg_l2_acc}|l2_wer:{avg_l2_wer}|\n"
-        # message = f"{prefix}|step:{global_step}|loss:{avg_loss}|mdd_wer:{avg_mdd_wer}|l1_wer:{avg_l1_wer}|l2_wer:{avg_l2_wer}|\n"
         message_parts.append("\n")
         message = "|".join(message_parts)
         save_ckpt = []
