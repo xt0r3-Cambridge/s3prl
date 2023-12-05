@@ -198,7 +198,6 @@ class L2ArcticDataset(Dataset):
         )
 
     def collate_fn(self, items):
-        # TODO: figure out what this is
         wav_views = []
         canonicals = []
         perceiveds = []
