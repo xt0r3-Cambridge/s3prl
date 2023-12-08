@@ -259,6 +259,9 @@ class DownstreamExpert(nn.Module):
                 stats=l1_stats,
             )
 
+        # L1 example: abacdeab
+        # L2 example:      eg
+
         # TODO: check if there is a way to store the stats per speaker and aggregate at the end
         #       instead of aggregating per batch
         l2_stats = Counter()
@@ -295,6 +298,8 @@ class DownstreamExpert(nn.Module):
         #       - false positives: the phones not understood by anyone
         #       - false negatives: the phones understood by the L1 speaker, but not by the L2 speaker
 
+        # abade
+        # abde   - (I 'a' 2)
         l1_pred_stats = wer_details_for_batch(
             ids=range(len(true_l1_phones)),
             refs=true_l1_phones,
@@ -308,6 +313,14 @@ class DownstreamExpert(nn.Module):
             hyps=pred_l2_phones,
             compute_alignments=True,
         )
+
+        # beach - true L1 
+        # bech - pred L1  - insert A
+
+        # beech - true L2
+        # apl - pred L2 - delect A, P L, insert B E E C H
+
+
 
         tp = 0
         fp = 0

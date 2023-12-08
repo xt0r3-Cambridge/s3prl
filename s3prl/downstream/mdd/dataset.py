@@ -66,7 +66,9 @@ class L2ArcticDataset(Dataset):
             self.config = yaml.safe_load(stream)
 
         with open(Path(phone_path) / "tokens.txt", "r") as stream:
-            self.arpa_phones = {phone.strip(): i for i, phone in enumerate(stream.readlines())}
+            self.arpa_phones = {
+                phone.strip(): i for i, phone in enumerate(stream.readlines())
+            }
 
         # The number of different phones
         self.output_class_num = max(self.arpa_phones.values()) + 1
@@ -187,6 +189,13 @@ class L2ArcticDataset(Dataset):
                 print(f"Problematic file: {annotation_file}")
                 print(f"Problematic label: {repr(annotation)}")
                 raise e
+
+            assert len(canonical) == len(
+                perceived
+            ), f"""Error: canonical and perceived phoneme sequences have differing lengths:
+canonical: {canonical}
+perceived: {perceived}
+"""
 
         # `runner.py` expects the returned items to be of form (wav_view, *others)
         return (
