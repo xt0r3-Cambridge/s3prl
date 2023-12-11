@@ -168,3 +168,4 @@ converted_ckpts/
 
 # testing notebook 
 s3prl/downstream/mdd/testing.ipynb
+s3prl/downstream/mdd/test_alignment.ipynb
