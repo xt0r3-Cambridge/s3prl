@@ -53,6 +53,11 @@ class DownstreamExpert(nn.Module):
     """
 
     def __init__(self, upstream_dim, downstream_expert, expdir, **kwargs):
+        """
+        @param upstream_dim: the dimensions of the upstream model
+        @param downstream_expert: the `downstream_expert` part of the config file loaded from `./config.yaml`
+        @param expdir: the directory to save the experiment in
+        """
         super(DownstreamExpert, self).__init__()
         self.upstream_dim = upstream_dim
 
@@ -66,13 +71,7 @@ class DownstreamExpert(nn.Module):
         self.dataset["test"] = L2ArcticDataset("test", **self.datarc)
 
         # The final layer we append to the upstream model for L1 and L2 prediction
-        self.l1_model = Model(
-            input_dim=self.upstream_dim,
-            output_class_num=self.dataset["train"].output_class_num,
-            **self.modelrc,
-        )
-
-        self.l2_model = Model(
+        self.mdd_model = Model(
             input_dim=self.upstream_dim,
             output_class_num=self.dataset["train"].output_class_num,
             **self.modelrc,
@@ -86,26 +85,6 @@ class DownstreamExpert(nn.Module):
         # Blank is the empty label. In this case, it is the label of silence
         self.objective = nn.CTCLoss(blank=self.arpa_phones["sil"], reduction="none")
 
-        # Create mapping from
-        # self.decoder = ctc_decoder(
-        #     lexicon=None,
-        #     tokens=f"{self.datarc['phone_path']}/tokens.txt",
-        #     lm=None,  # no language model used
-        #     lm_dict=None,
-        #     nbest=1,  # beam search returns top 1 best result
-        #     beam_size=50,  # we retain 50 beams during beam search
-        #     beam_size_token=None,
-        #     beam_threshold=50,
-        #     lm_weight=2,
-        #     word_score=0,
-        #     unk_score=-float("inf"),
-        #     sil_score=0,
-        #     log_add=False,
-        #     blank_token="sil",
-        #     sil_token="sil",
-        #     unk_word="<unk>",
-        # )
-
         self.logging = Path(expdir) / "log.log"
         self.best = defaultdict(lambda: 0)
 
@@ -117,14 +96,14 @@ class DownstreamExpert(nn.Module):
 
             (
                 [wav1, wav2, ...],
-                [l1_label1, l1_label2, ...],
-                [l2_label1, l2_label2, ...],
+                [perceived_label_1, perceived_label_2, ...],
+                [canonical_label_1, canonical_label_2, ...],
             )
 
             where wav1, wav2 ... are in variable length
             each wav is torch.FloatTensor in cpu with dim()==1 and sample_rate==44100
             and
-            l1_label1, ... are LongTensors with the encodings of the target label
+            perceived_label_1, ... are LongTensors with the encodings of the target label
             sequence
         """
         assert split in [
@@ -134,7 +113,7 @@ class DownstreamExpert(nn.Module):
         ], f"Invalid split {split}. Expected 'train', 'dev' or 'test'."
         return DataLoader(
             self.dataset[split],
-            batch_size=1,
+            batch_size=1,  # self.datarc[f'{split}_batch_size'],  - _make_grads in `runner.py` doesn't allow larger batches
             shuffle=True,
             num_workers=self.datarc["num_workers"],
             drop_last=False,
@@ -150,14 +129,15 @@ class DownstreamExpert(nn.Module):
             records = records,
         )
     """
+
     def forward(
         self,
         split: str,
         features: List[torch.FloatTensor],
-        l1_labels: torch.FloatTensor,
-        l2_labels: torch.FloatTensor,
-        l1_lengths: torch.LongTensor,
-        l2_lengths: torch.LongTensor,
+        true_perceived_phones: torch.FloatTensor,
+        true_canonical_phones: torch.FloatTensor,
+        perceived_lengths: torch.LongTensor,
+        canonical_lengths: torch.LongTensor,
         records: Dict[str, List[any]],
         **kwargs,
     ):
@@ -171,21 +151,21 @@ class DownstreamExpert(nn.Module):
                 each feat is in torch.FloatTensor and already
                 put in the device assigned by command-line args
 
-            l1_labels:
+            true_perceived_phones:
                 the frame-wise phone labels how an L1 (native) speaker would
                 hear them
                 the labels are all padded to the same length
 
-            l2_labels:
+            true_canonical_phones:
                 the frame-wise phone labels how an L2 (native) speaker
                 intended them
                 the labels are all padded to the same length
 
-            l1_lengths:
-                list containing the lengths of the unpadded L1 labels
+            perceived_lengths:
+                list containing the lengths of the unpadded perceived labels
 
-            l2_lengths:
-                list containing the lengths of the unpadded L2 labels
+            canonical_lengths:
+                list containing the lengths of the unpadded canonical labels
 
             records:
                 defaultdict(list), by appending contents into records,
@@ -209,180 +189,173 @@ class DownstreamExpert(nn.Module):
 
         # We make the predictions with the fine-tuned models using the
         # upstream features
-        l1_preds = self.l1_model(features)
-        l2_preds = self.l2_model(features)
+        pred_phone_distributions = self.mdd_model(features)
 
-        # Compute the loss for both models
-        l1_loss = self.objective(l1_preds, l1_labels, feature_lengths, l1_lengths)
-        l2_loss = self.objective(l2_preds, l2_labels, feature_lengths, l2_lengths)
-
-        loss = l1_loss + l2_loss
-
+        # Compute the CTC loss
+        loss = self.objective(
+            pred_phone_distributions,
+            true_canonical_phones,
+            feature_lengths,
+            canonical_lengths,
+        )
         records["loss"].append(loss)
 
         # Get the true L1 and L2 phones
-        true_l1_phones = l1_labels
-        true_l2_phones = l2_labels
 
         # Decode the label sequence from the predictions
         # Note: we are using a greedy decoding algorithm here
         # This is the case, as the non-greedy algos are slow and
         # I have not managed to find algos that run on the GPU that do the decoding
+
         # TODO: see if there are any CTC decoding algos that run on the GPU
-        relative_l1_lengths = [
-            l1_len / len(padded_l1_label)
-            for (l1_len, padded_l1_label) in zip(l1_lengths, l1_labels)
-        ]
-        relative_l2_lengths = [
-            l2_len / len(padded_l2_label)
-            for (l2_len, padded_l2_label) in zip(l2_lengths, l2_labels)
-        ]
-        pred_l1_phones = ctc_greedy_decode(
-            probabilities=rearrange(l1_preds, "L B C -> B C L"),
-            seq_lens=relative_l1_lengths,
-            blank_id=0,
-        )
-        pred_l2_phones = ctc_greedy_decode(
-            probabilities=rearrange(l2_preds, "L B C -> B C L"),
-            seq_lens=relative_l2_lengths,
-            blank_id=0,
-        )
-
-        # Computing metrics:
-
-        # Compute WER scores for the L1 and L2 predictions
-        l1_stats = Counter()
-        for true_l1, pred_l1 in zip(true_l1_phones, pred_l1_phones):
-            l1_stats = accumulatable_wer_stats(
-                refs=true_l1_phones,
-                hyps=pred_l1_phones,
-                stats=l1_stats,
+        relative_canonical_lengths = [
+            canonical_length / len(padded_true_canonical_phones)
+            for (canonical_length, padded_true_canonical_phones) in zip(
+                canonical_lengths, true_canonical_phones
             )
+        ]
 
-        # L1 example: abacdeab
-        # L2 example:      eg
+        pred_canonical_phones = ctc_greedy_decode(
+            probabilities=rearrange(pred_phone_distributions, "L B C -> B C L"),
+            seq_lens=relative_canonical_lengths,
+            blank_id=0,
+        )
 
         # TODO: check if there is a way to store the stats per speaker and aggregate at the end
         #       instead of aggregating per batch
-        l2_stats = Counter()
-        for true_l2, pred_l2 in zip(true_l2_phones, pred_l2_phones):
-            l2_stats = accumulatable_wer_stats(
-                refs=true_l2_phones,
-                hyps=pred_l2_phones,
-                stats=l2_stats,
-            )
 
-        records["l1_wer"].append(l1_stats["WER"])
-        records["l2_wer"].append(l2_stats["WER"])
+        # Compute WER scores for the predictions
+        prediction_error_metrics = Counter()
+        prediction_error_metrics = accumulatable_wer_stats(
+            refs=true_canonical_phones,
+            hyps=pred_canonical_phones,
+            stats=prediction_error_metrics,
+        )
 
-        # TODO: verify if this is the right metric to be using
-        #       - refer to the papers in the supervisor meeting notes
-        # TODO: add a good description of what we are doing
-        # Metric for reconstructing L1 and L2 scores: WER
-        # TODO: describe it here
+        # Phoneme error rate
+        records["per"].append(prediction_error_metrics["WER"])
+
+        # TODO: refer to the paper we took this approach from
+
         # Metric for mispronunciation deection: f1-score
         # Way of computing it:
-        # 1. Finding errors (L1):
-        #    - We find the best alignment between the true and predicted L1 phones
-        #    - If we match a character in the predictions to one in the true phones,
-        #      it's deeded as a correct phone, otherwise, it's a mispronunciation
-        # 2. Verifying errors (L2):
-        #    - We find the best alignment between the true and predicted L2 phones
-        #    - If we match a character in the predictions to one in the true phones,
-        #      it's deeded as a phone a person with an accent would understand.
-        #      otherwise, it's an error that is **not** the result of mispronunciation.
-        # 3. Computing metrics:
-        #    - We use F1 score as a metric, where the classes are as follows:
-        #       - true positives: the phones understood by the L2 speaker, but not by the L1 speaker
-        #       - true negatives: the phones understood by both speakers
-        #       - false positives: the phones not understood by anyone
-        #       - false negatives: the phones understood by the L1 speaker, but not by the L2 speaker
+        # 1. Aligning the true and predicted canonical sequences
+        # 2. Using the true perceived sequences to find the errors:
+        #    - true positives: neither the true or the predicted canonical phone agree with the true perceived phone
+        #    - true negatives: both the true and the predicted canonical phone agree with the true perceived phone
+        #    - false positives: the true canonical and true perceived phones are the same, but the predicted canonical phone differs
+        #    - false negatives: the predicted canonical and true perceived phones are the same, but the true canonical phone differs
 
-        # abade
-        # abde   - (I 'a' 2)
-        l1_pred_stats = wer_details_for_batch(
-            ids=range(len(true_l1_phones)),
-            refs=true_l1_phones,
-            hyps=pred_l1_phones,
+        prediction_stats = wer_details_for_batch(
+            ids=range(len(true_canonical_phones)),
+            refs=true_canonical_phones,
+            hyps=pred_canonical_phones,
             compute_alignments=True,
         )
 
-        l2_pred_stats = wer_details_for_batch(
-            ids=range(len(true_l2_phones)),
-            refs=true_l2_phones,
-            hyps=pred_l2_phones,
-            compute_alignments=True,
-        )
-
-        # beach - true L1 
-        # bech - pred L1  - insert A
-
-        # beech - true L2
-        # apl - pred L2 - delect A, P L, insert B E E C H
-
-
-
-        tp = 0
-        fp = 0
-        tn = 0
-        fn = 0
-        for i, (l1_pred_stat, l2_pred_stat) in enumerate(
-            zip(l1_pred_stats, l2_pred_stats)
+        empty_token = "<eps>"
+        for prediction_stat, perceived_utterance in zip(
+            prediction_stats, true_perceived_phones
         ):
-            l1_align = l1_pred_stat["alignment"]
-            l2_align = l2_pred_stat["alignment"]
+            # We assume that there is no need for aligning the L1 and L2 labels,
+            # because the minimum edit distance between them can be achieved using
+            # only substitutions and matches. This holds for all data points,
+            # except data point #2006 in our dataset.
+            # Data point #2006 has an edit distance of 10 instead of 9 if using this method.
+            # We choose to use this simplification and potentially remove data point #2006 in
+            # the future.
+            pred_to_true_canonical_alignment = prediction_stat["alignment"]
+            canonical_utterance = prediction_stat["ref_tokens"]
+            pred_canonical_utterance = prediction_stat["hyp_tokens"]
 
-            # This isn't a good assumption, because the length of the alignments
-            # depends on the edit distance, so if the two sequences are of
-            # different lengths, the length of their alignment sequences will also differ
-            # assert len(l1_align) == len(
-            # l2_align
-            # ), f"Alignment lengths differ: {len(l1_align)} and {len(l2_align)}"
+            tp = 0
+            fp = 0
+            tn = 0
+            fn = 0
 
-            l1_understood = {
-                alignment_tuple[2]
-                for alignment_tuple in l1_align
-                if alignment_tuple[0] == "="
-            }
-            l2_understood = {
-                alignment_tuple[2]
-                for alignment_tuple in l2_align
-                if alignment_tuple[0] == "="
-            }
+            for op, true_idx, pred_idx in pred_to_true_canonical_alignment:
+                perceived_phone = (
+                    perceived_utterance[true_idx]
+                    if true_idx is not None
+                    else empty_token
+                )
+                canonincal_phone = (
+                    canonical_utterance[true_idx]
+                    if true_idx is not None
+                    else empty_token
+                )
+                pred_canonincal_phone = (
+                    pred_canonical_utterance[pred_idx]
+                    if pred_idx is not None
+                    else empty_token
+                )
+                if op == "=":  # pred_canonical == true_canonical
+                    if perceived_phone == canonincal_phone:
+                        tn += 1
+                    else:
+                        tp += 1
+                elif op == "S":  # substitution
+                    # This still detects mispronunciation
+                    if (
+                        canonincal_phone != perceived_phone
+                        and pred_canonincal_phone != perceived_phone
+                    ):
+                        tp += 1
+                    # We fail to detect mispronuncaition
+                    elif (
+                        canonincal_phone != perceived_phone
+                        and pred_canonincal_phone == perceived_phone
+                    ):
+                        fn += 1
+                    # We incorrectly detect mispronuncation
+                    elif (
+                        canonincal_phone == perceived_phone
+                        and pred_canonincal_phone != perceived_phone
+                    ):
+                        fp += 1
+                    else:
+                        assert False, "Incprrect substitution case"
+                elif op == "I":  # insertion
+                    assert true_idx == None, "Incorrect true index for insertion"
+                    # We think an insertion error occurred, but in reality it was a substitution error
+                    if canonincal_phone != perceived_phone:
+                        tp += 1
+                    # We think an insertion error occurred, but nothing did
+                    else:
+                        fp += 1
+                elif op == "D":  # deletion
+                    assert pred_idx == None, "Incorrect pred index for deletion"
+                    # We think a deletion error occurred, but in reality it was a substitution error
+                    if canonincal_phone != perceived_phone:
+                        tp += 1
+                    # We think a deletion error occurred, but nothing did
+                    else:
+                        fp += 1
 
-            someone_understood = l1_understood | l2_understood
+            precision = 0
+            if tp + fp > 0:
+                precision = tp / (tp + fp)
+            recall = 0
+            if tp + fn > 0:
+                recall = tp / (tp + fn)
+            f1_score = 0
+            if precision != 0 or recall != 0:
+                f1_score = 2 / ((1 / precision) + (1 / recall))
 
-            # Assumption: we have an true error if the L1 speaker
-            # wouldn't understand something the L2 speaker would
-
-            # True negative: everyone understands it
-            tn += len(l1_understood & l2_understood)
-            # True positive: L2 speaker understands, but L1 doesn't
-            tp += len(l2_understood - l1_understood)
-            # False negative: L1 speaker understands, but L2 doesn't
-            fn += len(l1_understood - l2_understood)
-            # False positive: No one understands
-            fp += len(pred_l1_phones[i]) - len(someone_understood)
-
-        precision = 0
-        if tp + fp > 0:
-            precision = tp / (tp + fp)
-        recall = 0
-        if tp + fn > 0:
-            recall = tp / (tp + fn)
-        f1_score = 0
-        if precision != 0 or recall != 0:
-            f1_score = 2 / ((1 / precision) + (1 / recall))
-
-        records["precision"].append(precision)
-        records["recall"].append(recall)
-        records["f1_score"].append(f1_score)
+            records["precision"].append(precision)
+            records["recall"].append(recall)
+            records["f1_score"].append(f1_score)
 
         return loss
 
     # Interface
     def log_records(
-        self, split: str, records: Dict[str, List[any]], logger, global_step: int, **kwargs
+        self,
+        split: str,
+        records: Dict[str, List[any]],
+        logger,
+        global_step: int,
+        **kwargs,
     ):
         """
         Args:
@@ -401,13 +374,11 @@ class DownstreamExpert(nn.Module):
             global_step:
                 global_step in runner, which is helpful for Tensorboard logging
         """
-        # TODO: change avg_loss to some better metric, e.g. accuracy
         prefix = f"mdd/{split}-"
 
         metrics = [
             "loss",
-            "l1_wer",
-            "l2_wer",
+            "per",
             "f1_score",
             "precision",
             "recall",
