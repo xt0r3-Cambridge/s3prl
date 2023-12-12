@@ -274,13 +274,13 @@ hypothetical: {len(hypothetical_aligned)}
         """
         empty_token = -1
         true_alignment = self.compute_alignment(
-            reference=true_perceived_phones,
-            hypothetical=true_canonical_phones,
+            reference=true_canonical_phones,
+            hypothetical=true_perceived_phones,
             empty_token=empty_token,
         )
 
         pred_alignment = self.compute_alignment(
-            reference=true_perceived_phones,
+            reference=true_canonical_phones,
             hypothetical=pred_canonical_phones,
             empty_token=empty_token,
         )
@@ -297,32 +297,34 @@ hypothetical: {len(hypothetical_aligned)}
         pred_reference = pred_alignment["reference_aligned"]
         true_hypothetical = true_alignment["hypothetical_aligned"]
         pred_hypothetical = pred_alignment["hypothetical_aligned"]
+
+        # TODO: write tests to make sure this is correct
         while true_alignment_idx < len(true_reference) and pred_alignment_idx < len(
             pred_reference
         ):
             if true_reference[true_alignment_idx] == pred_reference[pred_alignment_idx]:
-                aligned_true_canonical_phones.append(
-                    true_hypothetical[true_alignment_idx]
-                )
+                aligned_true_canonical_phones.append(true_reference[true_alignment_idx])
                 aligned_pred_canonical_phones.append(
                     pred_hypothetical[pred_alignment_idx]
                 )
-                aligned_true_perceived_phones.append(true_reference[true_alignment_idx])
+                aligned_true_perceived_phones.append(
+                    true_hypothetical[true_alignment_idx]
+                )
                 true_alignment_idx += 1
                 pred_alignment_idx += 1
             elif true_reference[true_alignment_idx] == empty_token:
-                aligned_true_canonical_phones.append(
+                aligned_true_canonical_phones.append(empty_token)
+                aligned_pred_canonical_phones.append(empty_token)
+                aligned_true_perceived_phones.append(
                     true_hypothetical[true_alignment_idx]
                 )
-                aligned_pred_canonical_phones.append(empty_token)
-                aligned_true_perceived_phones.append(true_reference[true_alignment_idx])
                 true_alignment_idx += 1
             elif pred_reference[pred_alignment_idx] == empty_token:
                 aligned_true_canonical_phones.append(empty_token)
                 aligned_pred_canonical_phones.append(
                     pred_hypothetical[pred_alignment_idx]
                 )
-                aligned_true_perceived_phones.append(true_reference[true_alignment_idx])
+                aligned_true_perceived_phones.append(empty_token)
                 pred_alignment_idx += 1
             else:
                 assert False, f"""Invalid alignment parse for strings:
@@ -338,8 +340,8 @@ Exiting...
         fp = 0
         tn = 0
         fn = 0
-        corr_diag=0
-        err_diag=0
+        corr_diag = 0
+        err_diag = 0
 
         for true_canonical_phone, pred_canonical_phone, true_perceived_phone in zip(
             aligned_true_canonical_phones,
@@ -494,7 +496,7 @@ Exiting...
         records["per"].append(asr_metrics["WER"])
 
         # TODO: refer to the paper we took this approach from
-        # https://arxiv.org/pdf/2203.15937.pdf 
+        # https://arxiv.org/pdf/2203.15937.pdf
 
         for true_canonical_1batch, true_perceived_1batch, pred_canonical_1batch in zip(
             true_canonical_phones, true_perceived_phones, pred_canonical_phones
