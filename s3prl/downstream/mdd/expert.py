@@ -109,7 +109,7 @@ class DownstreamExpert(nn.Module):
         ], f"Invalid split {split}. Expected 'train', 'dev' or 'test'."
         return DataLoader(
             self.dataset[split],
-            batch_size=1,  # self.datarc[f'{split}_batch_size'],  - _make_grads in `runner.py` doesn't allow larger batches
+            batch_size=self.datarc[f'{split}_batch_size'],#  - _make_grads in `runner.py` doesn't allow larger batches
             shuffle=True,
             num_workers=self.datarc["num_workers"],
             drop_last=False,
@@ -484,6 +484,10 @@ Exiting...
             blank_id=0,
         )
 
+        # TODO: remove
+        if split == 'train':
+            return loss
+
         # TODO: check if there is a way to store the stats per speaker and aggregate at the end
         #       instead of aggregating per batch
 
@@ -561,15 +565,16 @@ Exiting...
         avg_loss = torch.FloatTensor(records["loss"]).mean().item()
 
         for metric in metrics:
-            avg_metric = torch.FloatTensor(records[metric]).mean().item()
-            logger.add_scalar(f"{prefix}{metric}", avg_metric, global_step=global_step)
-            message_parts.append(f"{metric}:{avg_metric}")
+            if metric in records:
+                avg_metric = torch.FloatTensor(records[metric]).mean().item()
+                logger.add_scalar(f"{prefix}{metric}", avg_metric, global_step=global_step)
+                message_parts.append(f"{metric}:{avg_metric}")
 
         message_parts.append("\n")
         message = "|".join(message_parts)
 
         save_ckpt = []
-        if avg_loss > self.best[prefix]:
+        if avg_loss < self.best[prefix]:
             self.best[prefix] = avg_loss
             message = f"best|{message}"
             name = prefix.split("/")[-1].split("-")[0]
