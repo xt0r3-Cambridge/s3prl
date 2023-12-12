@@ -90,6 +90,9 @@ class L2ArcticDataset(Dataset):
                 except Exception as e:
                     print(f"Skipping malformatted TextGrid file: {annotation_file}")
 
+        # TODO: remove -- added to test if we can overfit
+        # self.item_paths = self.item_paths[:30]
+
     def _load_wav(self, wav_path):
         wav, sr = torchaudio.load(os.path.join(self.data_root, wav_path))
         assert (
