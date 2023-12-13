@@ -1,0 +1,33 @@
+train:
+    speakers: [
+        ABA,
+        YBAA,
+        ZHAA,
+        BWC,
+        NCC,
+        TXHC,
+        ASI,
+        RRBI,
+        SVBI,
+        TNI,
+        HKK,
+        YDCK,
+        YKWK,
+        EBVS,
+        MBMPS,
+        NJS,
+        PNV,
+        THV,
+        TLV,
+    ]
+dev: 
+    speakers: [
+        SKA,
+        HJK,
+        HQTV,
+    ]
+test:
+    speakers: [
+        ERMS,
+        LXC,
+    ]
