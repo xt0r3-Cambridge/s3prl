@@ -1,9 +1,9 @@
 # This gets loaded by `runner.py`
 # modelrc and datarc get passed to the model
 runner:
-  total_steps: 10000
+  total_steps: 700
   gradient_clipping: 1
-  gradient_accumulate_steps: 8
+  gradient_accumulate_steps: 32
 
   log_step: 89  # one epoch
   eval_step: 89
@@ -15,18 +15,32 @@ runner:
 
 optimizer:
   name: AdamW
-  lr: 2.e-4
+  lr: 1.e-5
   
-scheduler:
-  name: linear_schedule_with_warmup
-  num_warmup_steps: 1000
+# scheduler:
+#   name: linear_schedule_with_warmup
+#   num_warmup_steps: 1000
+
+specaug:
+  adaptive: false
+  adaptive_number_ratio: 0.04
+  adaptive_size_ratio: 0.04
+  max_n_time_masks: 20
+  apply_time_warp: true
+  apply_time_mask: true
+  apply_freq_mask: true
+  time_warp_window: 5
+  time_mask_width_range: [0, 40]
+  freq_mask_width_range: [0, 50]
+  num_freq_mask: 4
+  num_time_mask: 2
 
 downstream_expert:
   datarc:
-    num_workers: 8
-    train_batch_size: 4
-    test_batch_size: 4
-    dev_batch_size: 4
+    num_workers: 1
+    train_batch_size: 1
+    test_batch_size: 1
+    dev_batch_size: 1
     data_root: '/home/xt0r3-user/cambridge/partii/dissertation/s3prl/data/l2arctic_release_v5.0'
     phone_path: './downstream/mdd/data'
     # bucket_file: './data/len_for_bucket_timit' # run: `python preprocess/generate_len_for_bucket.py -i your_path_to/TIMIT -a .WAV -n len_for_bucket_timit`
