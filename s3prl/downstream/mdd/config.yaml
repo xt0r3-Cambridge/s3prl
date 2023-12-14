@@ -5,9 +5,9 @@ runner:
   gradient_clipping: 1
   gradient_accumulate_steps: 32
 
-  log_step: 89  # one epoch
+  log_step: 1  # one epoch
   eval_step: 89
-  save_step: 89
+  save_step: 20
   max_keep: 1
   eval_dataloaders:
     - dev
@@ -15,7 +15,8 @@ runner:
 
 optimizer:
   name: AdamW
-  lr: 1.e-5
+  lr: 3.e-4
+  upstream_lr: 1.e-5
   
 # scheduler:
 #   name: linear_schedule_with_warmup

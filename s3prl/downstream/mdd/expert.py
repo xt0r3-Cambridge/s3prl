@@ -12,7 +12,7 @@
 
 
 ###############
-# IMPORTATION #
+#   IMPORTS   #
 ###############
 import os
 import math
@@ -79,7 +79,7 @@ class DownstreamExpert(nn.Module):
             self.arpa_phone_list = [phone for (i, phone) in arpa_tuples]
 
         # Blank is the empty label. In this case, it is the label of silence
-        self.objective = nn.CTCLoss(blank=self.arpa_phones["sil"], reduction="mean")
+        self.objective = nn.CTCLoss(blank=self.arpa_phones["<eps>"], reduction="mean")
 
         self.logging = Path(expdir) / "log.log"
         self.best = defaultdict(lambda: 0)
@@ -227,7 +227,8 @@ hypothetical: {len(hypothetical_aligned)}
         """
         Computes the ASR metrics for the phone reconstruction of our model.
 
-        @returns: collections.Counter
+        Returns: 
+            collections.Counter
             The updated running statistics, with keys:
 
             "WER" - word error rate
@@ -463,6 +464,10 @@ Exiting...
         )
         records["loss"].append(loss)
 
+        # # TODO: remove
+        # if split == 'train':
+        #     return loss
+
         # Get the true L1 and L2 phones
 
         # Decode the label sequence from the predictions
@@ -481,12 +486,9 @@ Exiting...
         pred_canonical_phones = ctc_greedy_decode(
             probabilities=rearrange(pred_phone_distributions, "L B C -> B C L"),
             seq_lens=relative_canonical_lengths,
-            blank_id=0,
+            blank_id=self.arpa_phones["<eps>"],
         )
 
-        # TODO: remove
-        if split == 'train':
-            return loss
 
         # TODO: check if there is a way to store the stats per speaker and aggregate at the end
         #       instead of aggregating per batch
