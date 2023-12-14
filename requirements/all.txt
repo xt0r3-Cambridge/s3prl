@@ -34,4 +34,5 @@ tensorboard
 flashlight-text
 einops
 speechbrain 
-pyctcdecode
+praat-textgrids
+textgrid
