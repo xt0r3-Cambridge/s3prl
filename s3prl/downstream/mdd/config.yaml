@@ -22,19 +22,19 @@ optimizer:
 #   name: linear_schedule_with_warmup
 #   num_warmup_steps: 1000
 
-specaug:
-  adaptive: false
-  adaptive_number_ratio: 0.04
-  adaptive_size_ratio: 0.04
-  max_n_time_masks: 20
-  apply_time_warp: true
-  apply_time_mask: true
-  apply_freq_mask: true
-  time_warp_window: 5
-  time_mask_width_range: [0, 40]
-  freq_mask_width_range: [0, 50]
-  num_freq_mask: 4
-  num_time_mask: 2
+# specaug:
+#   adaptive: false
+#   adaptive_number_ratio: 0.04
+#   adaptive_size_ratio: 0.04
+#   max_n_time_masks: 20
+#   apply_time_warp: true
+#   apply_time_mask: true
+#   apply_freq_mask: true
+#   time_warp_window: 5
+#   time_mask_width_range: [0, 40]
+#   freq_mask_width_range: [0, 50]
+#   num_freq_mask: 4
+#   num_time_mask: 2
 
 downstream_expert:
   datarc:
@@ -50,3 +50,22 @@ downstream_expert:
 
   modelrc: 
     none: None
+
+  decoder_params:
+    lexicon: null
+    tokens: './downstream/mdd/data/tokens.txt'
+    lm: null  # no language model used
+    lm_dict: null
+    nbest: 1  # beam search returns top 1 best result  
+    beam_size: 50  # we retain 50 beams during beam search
+    beam_size_token: null
+    beam_threshold: 50
+    lm_weight: 2
+    word_score: 0
+    unk_score: -.inf
+    sil_score: 0
+    log_add: False
+    blank_token: '<eps>'
+    sil_token: 'sil'
+    unk_word: '<unk>'
+

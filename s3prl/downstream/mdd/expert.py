@@ -60,6 +60,7 @@ class DownstreamExpert(nn.Module):
         # These get loaded by `run_downstream.py` from `./config.yaml`
         self.datarc = downstream_expert["datarc"]
         self.modelrc = downstream_expert["modelrc"]
+        self.decoder_params = downstream_expert["decoder_params"]
 
         self.dataset = {}
         self.dataset["train"] = L2ArcticDataset("train", **self.datarc)
@@ -77,6 +78,10 @@ class DownstreamExpert(nn.Module):
             arpa_tuples = [(i, phone) for (i, phone) in enumerate(stream.readlines())]
             self.arpa_phones = {phone.strip(): i for (i, phone) in arpa_tuples}
             self.arpa_phone_list = [phone for (i, phone) in arpa_tuples]
+
+        self.decoder = ctc_decoder(
+            **self.decoder_params,
+        )
 
         # Blank is the empty label. In this case, it is the label of silence
         self.objective = nn.CTCLoss(blank=self.arpa_phones["<eps>"], reduction="mean")
@@ -109,13 +114,26 @@ class DownstreamExpert(nn.Module):
         ], f"Invalid split {split}. Expected 'train', 'dev' or 'test'."
         return DataLoader(
             self.dataset[split],
-            batch_size=self.datarc[f'{split}_batch_size'],#  - _make_grads in `runner.py` doesn't allow larger batches
+            batch_size=self.datarc[
+                f"{split}_batch_size"
+            ],  #  - _make_grads in `runner.py` doesn't allow larger batches
             shuffle=True,
             num_workers=self.datarc["num_workers"],
             drop_last=False,
             pin_memory=True,
             collate_fn=self.dataset[split].collate_fn,
         )
+
+    def print_phones(self, *args, return_list=False):
+        aligned_phones = [[] for i in range(len(args))]
+
+        for phones in zip(*args):
+            maxi = max([len(str(phone)) for phone in phones])
+            for i, phone in enumerate(phones):
+                aligned_phones[i].append(str(phone).center(maxi))
+
+        if return_list:
+            return aligned_phones
 
     def compute_alignment(self, reference, hypothetical, empty_token=-1):
         # TODO: make faster
@@ -227,7 +245,7 @@ hypothetical: {len(hypothetical_aligned)}
         """
         Computes the ASR metrics for the phone reconstruction of our model.
 
-        Returns: 
+        Returns:
             collections.Counter
             The updated running statistics, with keys:
 
@@ -448,8 +466,9 @@ Exiting...
 
         # These can't go in the dataset collate_fn, because they are
         # produced by the upstream model.
+        # print(features)
         feature_lengths = torch.LongTensor([len(l) for l in features])
-        features = pad_sequence(features)
+        features = pad_sequence(features, padding_value=self.arpa_phones["<eps>"])
 
         # We make the predictions with the fine-tuned models using the
         # upstream features
@@ -462,11 +481,11 @@ Exiting...
             feature_lengths,
             canonical_lengths,
         )
+
         records["loss"].append(loss)
 
-        # # TODO: remove
-        # if split == 'train':
-        #     return loss
+        if split == "train":
+            return loss
 
         # Get the true L1 and L2 phones
 
@@ -476,48 +495,49 @@ Exiting...
         # I have not managed to find algos that run on the GPU that do the decoding
 
         # TODO: see if there are any CTC decoding algos that run on the GPU
-        relative_canonical_lengths = [
-            canonical_length / len(padded_true_canonical_phones)
-            for (canonical_length, padded_true_canonical_phones) in zip(
-                canonical_lengths, true_canonical_phones
+        with torch.no_grad():
+            rearranged_predictions = rearrange(
+                pred_phone_distributions, "L B C -> B L C"
             )
-        ]
-
-        pred_canonical_phones = ctc_greedy_decode(
-            probabilities=rearrange(pred_phone_distributions, "L B C -> B C L"),
-            seq_lens=relative_canonical_lengths,
-            blank_id=self.arpa_phones["<eps>"],
-        )
-
-
-        # TODO: check if there is a way to store the stats per speaker and aggregate at the end
-        #       instead of aggregating per batch
-
-        # Compute WER scores for the canonical label reconstruction
-        # This is an ASR task, so we use the WER metric to compute the phoneme error rate
-        asr_metrics = self.compute_asr_metrics(
-            true_canonical_phones=true_canonical_phones,
-            pred_canonical_phones=pred_canonical_phones,
-        )
-        records["per"].append(asr_metrics["WER"])
-
-        # TODO: refer to the paper we took this approach from
-        # https://arxiv.org/pdf/2203.15937.pdf
-
-        for true_canonical_1batch, true_perceived_1batch, pred_canonical_1batch in zip(
-            true_canonical_phones, true_perceived_phones, pred_canonical_phones
-        ):
-            mdd_metrics = self.compute_mdd_metrics(
-                true_canonical_phones=true_canonical_1batch,
-                true_perceived_phones=true_perceived_1batch,
-                pred_canonical_phones=pred_canonical_1batch,
+            pred_sequences = self.decoder(
+                emissions=rearranged_predictions.cpu().contiguous(),
+                # TODO: test if correct -- potentially change
+                lengths=feature_lengths,
+                # seq_lens=torch.ones(rearranged_predictions.shape[0]),
+                # blank_id=self.arpa_phones["<eps>"],
             )
 
-            for k, v in mdd_metrics.items():
-                records[k].append(v)
-            # records["precision"].append(mdd_metrics["precision"])
-            # records["recall"].append(mdd_metrics["recall"])
-            # records["f1_score"].append(mdd_metrics["f1_score"])
+            pred_canonical_phones = [seq[0].tokens for seq in pred_sequences]
+
+            # TODO: check if there is a way to store the stats per speaker and aggregate at the end
+            #       instead of aggregating per batch
+
+            # Compute WER scores for the canonical label reconstruction
+            # This is an ASR task, so we use the WER metric to compute the phoneme error rate
+            asr_metrics = self.compute_asr_metrics(
+                true_canonical_phones=true_canonical_phones,
+                pred_canonical_phones=pred_canonical_phones,
+            )
+            records["per"].append(asr_metrics["WER"])
+
+            # TODO: refer to the paper we took this approach from
+            # https://arxiv.org/pdf/2203.15937.pdf
+
+            for (
+                true_canonical_1batch,
+                true_perceived_1batch,
+                pred_canonical_1batch,
+            ) in zip(
+                true_canonical_phones, true_perceived_phones, pred_canonical_phones
+            ):
+                mdd_metrics = self.compute_mdd_metrics(
+                    true_canonical_phones=true_canonical_1batch,
+                    true_perceived_phones=true_perceived_1batch,
+                    pred_canonical_phones=pred_canonical_1batch,
+                )
+
+                for k, v in mdd_metrics.items():
+                    records[k].append(v)
 
         return loss
 
@@ -569,7 +589,9 @@ Exiting...
         for metric in metrics:
             if metric in records:
                 avg_metric = torch.FloatTensor(records[metric]).mean().item()
-                logger.add_scalar(f"{prefix}{metric}", avg_metric, global_step=global_step)
+                logger.add_scalar(
+                    f"{prefix}{metric}", avg_metric, global_step=global_step
+                )
                 message_parts.append(f"{metric}:{avg_metric}")
 
         message_parts.append("\n")

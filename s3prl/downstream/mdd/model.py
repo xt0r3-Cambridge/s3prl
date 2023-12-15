@@ -12,6 +12,7 @@
 ###############
 import torch
 import torch.nn as nn
+from torch.nn.functional import log_softmax
 
 
 #########
@@ -26,5 +27,6 @@ class Model(nn.Module):
 
 
     def forward(self, features):
-        predicted = self.linear(features)
-        return predicted
+        preds = self.linear(features)
+        log_preds = log_softmax(preds)
+        return log_preds
