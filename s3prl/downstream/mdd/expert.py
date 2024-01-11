@@ -20,10 +20,13 @@ import random
 import yaml
 from collections import defaultdict, Counter
 from typing import Dict, List
+from jaxtyping import Float, Int64, jaxtyped
+import typeguard
 
 # -------------#
 import torch
 import torch.nn as nn
+from torch import Tensor
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 from torchaudio.models.decoder import ctc_decoder
@@ -87,6 +90,7 @@ class DownstreamExpert(nn.Module):
         self.objective = nn.CTCLoss(blank=self.arpa_phones["<eps>"], reduction="mean")
 
         self.logging = Path(expdir) / "log.log"
+        self.verbose_log = Path(expdir) / "verbose_log.log"
         self.best = defaultdict(lambda: 0)
 
     # Interface
@@ -237,11 +241,13 @@ hypothetical: {len(hypothetical_aligned)}
             "hypothetical_aligned": hypothetical_aligned,
         }
 
+    # @jaxtyped
+    # @typeguard.typechecked
     def compute_asr_metrics(
         self,
-        true_canonical_phones: torch.LongTensor,
-        pred_canonical_phones: torch.LongTensor,
-    ):
+        true_canonical_phones: List[Int64[Tensor, "seq_len1"]],
+        pred_canonical_phones: List[Int64[Tensor, "seq_len2"]],
+    ) -> Counter:
         """
         Computes the ASR metrics for the phone reconstruction of our model.
 
@@ -263,11 +269,13 @@ hypothetical: {len(hypothetical_aligned)}
         )
         return prediction_error_metrics
 
+    @jaxtyped
+    @typeguard.typechecked
     def compute_mdd_metrics(
         self,
-        true_perceived_phones: torch.LongTensor,
-        true_canonical_phones: torch.LongTensor,
-        pred_canonical_phones: torch.LongTensor,
+        true_perceived_phones: Int64[Tensor, "seq_len"],
+        true_canonical_phones: Int64[Tensor, "seq_len2"],
+        pred_canonical_phones: Int64[Tensor, "seq_len3"],
     ):
         """
         TODO: this only works for a single batch
@@ -395,6 +403,16 @@ Exiting...
         corr_diag_pct = corr_diag / tp if tp > 0 else 0
         err_diag_pct = err_diag / tp if tp > 0 else 0
 
+        aligned_list = self.print_phones(
+            aligned_pred_canonical_phones,
+            aligned_true_canonical_phones,
+            aligned_true_perceived_phones,
+            return_list=True,
+        )
+        with open(self.verbose_log, "a") as f:
+            f.writelines([" | ".join(l) + "\n" for l in aligned_list])
+            f.write("\n\n")
+
         return {
             "corr_diag_pct": corr_diag_pct,
             "err_diag_pct": err_diag_pct,
@@ -412,15 +430,17 @@ Exiting...
         )
     """
 
+    @jaxtyped
+    @typeguard.typechecked
     def forward(
         self,
         split: str,
-        features: List[torch.FloatTensor],
-        true_perceived_phones: torch.LongTensor,
-        true_canonical_phones: torch.LongTensor,
-        perceived_lengths: torch.LongTensor,
-        canonical_lengths: torch.LongTensor,
-        records: Dict[str, List[any]],
+        features: List[Tensor],
+        true_perceived_phones: Int64[Tensor, "batch seq_len"],
+        true_canonical_phones: Int64[Tensor, "batch seq_len2"],
+        perceived_lengths: Int64[Tensor, "batch"],
+        canonical_lengths: Int64[Tensor, "batch"],
+        records: any,
         **kwargs,
     ):
         """
@@ -515,7 +535,8 @@ Exiting...
             # Compute WER scores for the canonical label reconstruction
             # This is an ASR task, so we use the WER metric to compute the phoneme error rate
             asr_metrics = self.compute_asr_metrics(
-                true_canonical_phones=true_canonical_phones,
+                #TODO: check if the [:canonical_lenghts] is correct
+                true_canonical_phones=true_canonical_phones[:canonical_lengths],
                 pred_canonical_phones=pred_canonical_phones,
             )
             records["per"].append(asr_metrics["WER"])
@@ -527,12 +548,19 @@ Exiting...
                 true_canonical_1batch,
                 true_perceived_1batch,
                 pred_canonical_1batch,
+                canonical_length_1batch,
+                perceived_length_1batch,
             ) in zip(
-                true_canonical_phones, true_perceived_phones, pred_canonical_phones
+                true_canonical_phones,
+                true_perceived_phones,
+                pred_canonical_phones,
+                canonical_lengths,
+                perceived_lengths,
             ):
                 mdd_metrics = self.compute_mdd_metrics(
-                    true_canonical_phones=true_canonical_1batch,
-                    true_perceived_phones=true_perceived_1batch,
+                    #TODO: check if the [:canonical/perceibed_lenght_1batch] is correct
+                    true_canonical_phones=true_canonical_1batch[:canonical_length_1batch],
+                    true_perceived_phones=true_perceived_1batch[:perceived_length_1batch],
                     pred_canonical_phones=pred_canonical_1batch,
                 )
 

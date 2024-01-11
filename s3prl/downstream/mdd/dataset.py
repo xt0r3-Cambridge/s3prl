@@ -16,6 +16,7 @@
 ###############
 import os
 import random
+from typing import List, Tuple
 import yaml
 
 # -------------#
@@ -27,6 +28,9 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data.dataset import Dataset
 from textgrid import TextGrid, IntervalTier
 from pathlib import Path
+from jaxtyping import Float, Int64, jaxtyped
+import typeguard
+from torch import Tensor
 
 # -------------#
 
@@ -84,14 +88,17 @@ class L2ArcticDataset(Dataset):
                 tg = TextGrid()
                 try:
                     tg.read(annotation_file)
-                    self.item_paths.append(
-                        {"item_root": item_root, "item_stem": annotation_file.stem}
-                    )
+                    self.item_paths.append((item_root, annotation_file.stem))
                 except Exception as e:
                     print(f"Skipping malformatted TextGrid file: {annotation_file}")
 
         # TODO: remove -- added to test if we can overfit
-        # self.item_paths = self.item_paths[:32]
+        self.item_paths.sort()
+        self.item_paths = [
+            {"item_root": item_root, "item_stem": annotation_stem}
+            for item_root, annotation_stem in self.item_paths
+        ]
+        self.item_paths = self.item_paths[:1]
 
     def _load_wav(self, wav_path):
         wav, sr = torchaudio.load(os.path.join(self.data_root, wav_path))
@@ -137,7 +144,11 @@ class L2ArcticDataset(Dataset):
         # TODO: change
         return len(self.item_paths)
 
-    def __getitem__(self, index):
+    @jaxtyped
+    @typeguard.typechecked
+    def __getitem__(
+        self, index
+    ) -> Tuple[Tensor, Int64[Tensor, "seq_len"], Int64[Tensor, "seq_len2"], int, int]:
         item_root = self.item_paths[index]["item_root"]
         item_stem = self.item_paths[index]["item_stem"]
 
@@ -182,23 +193,31 @@ class L2ArcticDataset(Dataset):
                 perceived_phone = phones[1]
 
             try:
-                canonical.append(
-                    self.arpa_phones[self._strip_arpa_phone(canonical_phone)]
-                )
-                perceived.append(
-                    self.arpa_phones[self._strip_arpa_phone(perceived_phone)]
-                )
+                canonical_phone = self.arpa_phones[
+                    self._strip_arpa_phone(canonical_phone)
+                ]
+                perceived_phone = self.arpa_phones[
+                    self._strip_arpa_phone(perceived_phone)
+                ]
+                # Remove parallel occurrences of phones to make the sequence generable by CTC loss
+                if len(canonical) == 0 or canonical_phone != self.arpa_phones['sil'] or canonical_phone != canonical[-1]:
+                    canonical.append(canonical_phone)
+                if len(perceived) == 0 or canonical_phone != self.arpa_phones['sil'] or perceived_phone != perceived[-1]:
+                    perceived.append(perceived_phone)
             except Exception as e:
                 print(f"Problematic file: {annotation_file}")
                 print(f"Problematic label: {repr(annotation)}")
                 raise e
 
-            assert len(canonical) == len(
-                perceived
-            ), f"""Error: canonical and perceived phoneme sequences have differing lengths:
-canonical: {canonical}
-perceived: {perceived}
-"""
+# This doesn't hold anymore because we are removing parallel padding 'sil' characters
+# We are removing them because the sequences will get aligned anyway, so aligning
+# 'sil' characters are useless
+#             assert len(canonical) == len(
+#                 perceived
+#             ), f"""Error: canonical and perceived phoneme sequences have differing lengths:
+# canonical: {canonical}
+# perceived: {perceived}
+# """
 
         # `runner.py` expects the returned items to be of form (wav_view, *others)
         return (
@@ -209,7 +228,17 @@ perceived: {perceived}
             len(perceived),
         )
 
-    def collate_fn(self, items):
+    @jaxtyped
+    @typeguard.typechecked
+    def collate_fn(
+        self, items
+    ) -> Tuple[
+        List[Tensor],
+        Int64[Tensor, "batch seq_len"],
+        Int64[Tensor, "batch seq_len2"],
+        Int64[Tensor, "batch"],
+        Int64[Tensor, "batch"],
+    ]:
         wav_views = []
         canonicals = []
         perceiveds = []
