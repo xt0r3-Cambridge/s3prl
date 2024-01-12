@@ -15,8 +15,8 @@ runner:
 
 optimizer:
   name: AdamW
-  lr: 3.e-4
-  upstream_lr: 1.e-5
+  lr: 3.e-3
+  upstream_lr: 1.e-4
   
 # scheduler:
 #   name: linear_schedule_with_warmup
@@ -58,9 +58,9 @@ downstream_expert:
     lm: null  # no language model used
     lm_dict: null
     nbest: 1  # beam search returns top 1 best result  
-    beam_size: 5000  # we retain 50 beams during beam search
+    beam_size: 1  # we retain 50 beams during beam search
     beam_size_token: null
-    beam_threshold: 5000
+    beam_threshold: 1
     lm_weight: 2
     word_score: 0
     unk_score: -.inf

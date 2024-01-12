@@ -31,6 +31,7 @@ from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 from torchaudio.models.decoder import ctc_decoder
 from torchaudio.functional import edit_distance
+from torch.nn.functional import log_softmax
 from pathlib import Path
 from einops import rearrange
 from speechbrain.decoders import ctc_greedy_decode
@@ -492,11 +493,12 @@ Exiting...
 
         # We make the predictions with the fine-tuned models using the
         # upstream features
-        pred_phone_distributions = self.mdd_model(features)
+        pred_phone_logits = self.mdd_model(features)
+        pred_phone_distribution = log_softmax(pred_phone_logits, dim=-1)
 
         # Compute the CTC loss
         loss = self.objective(
-            pred_phone_distributions,
+            pred_phone_distribution,
             true_canonical_phones,
             feature_lengths,
             canonical_lengths,
@@ -516,8 +518,9 @@ Exiting...
 
         # TODO: see if there are any CTC decoding algos that run on the GPU
         with torch.no_grad():
+            # TODO: if this fails working, change this back to a log_softmax version
             rearranged_predictions = rearrange(
-                pred_phone_distributions, "L B C -> B L C"
+                pred_phone_distribution, "L B C -> B L C"
             )
             pred_sequences = self.decoder(
                 emissions=rearranged_predictions.cpu().contiguous(),

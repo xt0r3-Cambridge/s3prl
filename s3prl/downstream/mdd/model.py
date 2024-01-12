@@ -12,7 +12,6 @@
 ###############
 import torch
 import torch.nn as nn
-from torch.nn.functional import log_softmax
 from jaxtyping import Float, jaxtyped
 import typeguard
 from torch import Tensor
@@ -34,5 +33,4 @@ class Model(nn.Module):
         self, features: Float[Tensor, "batch seq_len upstream_class_num"]
     ) -> Float[Tensor, "batch seq_len downstream_class_num"]:
         preds = self.linear(features)
-        log_preds = log_softmax(preds)
-        return log_preds
+        return preds
