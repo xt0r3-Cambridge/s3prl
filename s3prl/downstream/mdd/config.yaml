@@ -1,11 +1,11 @@
 # This gets loaded by `runner.py`
 # modelrc and datarc get passed to the model
 runner:
-  total_steps: 1400
+  total_steps: 2500
   gradient_clipping: 1
   gradient_accumulate_steps: 1
 
-  log_step: 1  # one epoch
+  log_step: 50  # one epoch
   eval_step: 100
   save_step: 700
   max_keep: 1
@@ -18,9 +18,9 @@ optimizer:
   lr: 3.e-3
   upstream_lr: 1.e-4
   
-# scheduler:
-#   name: linear_schedule_with_warmup
-#   num_warmup_steps: 1000
+scheduler:
+  name: cosine_schedule_with_warmup
+  num_warmup_steps: 0
 
 # specaug:
 #   adaptive: false
