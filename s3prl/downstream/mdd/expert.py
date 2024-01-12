@@ -421,7 +421,7 @@ Exiting...
             "recall": recall,
             "f1_score": f1_score,
         }
-
+    
     # Interface
     """runner.py releavant code:
         loss = self.downstream.model(
@@ -530,7 +530,8 @@ Exiting...
                 # blank_id=self.arpa_phones["<eps>"],
             )
 
-            pred_canonical_phones = [seq[0].tokens for seq in pred_sequences]
+            # Remove multiple silences -- we know this can never occur in the dataset
+            pred_canonical_phones = [torch.LongTensor(self.dataset[split].remove_multiple_sil(seq[0].tokens)) for seq in pred_sequences]
 
             # TODO: check if there is a way to store the stats per speaker and aggregate at the end
             #       instead of aggregating per batch
@@ -538,7 +539,7 @@ Exiting...
             # Compute WER scores for the canonical label reconstruction
             # This is an ASR task, so we use the WER metric to compute the phoneme error rate
             asr_metrics = self.compute_asr_metrics(
-                #TODO: check if the [:canonical_lenghts] is correct
+                # TODO: check if the [:canonical_lenghts] is correct
                 true_canonical_phones=true_canonical_phones[:canonical_lengths],
                 pred_canonical_phones=pred_canonical_phones,
             )
@@ -561,9 +562,13 @@ Exiting...
                 perceived_lengths,
             ):
                 mdd_metrics = self.compute_mdd_metrics(
-                    #TODO: check if the [:canonical/perceibed_lenght_1batch] is correct
-                    true_canonical_phones=true_canonical_1batch[:canonical_length_1batch],
-                    true_perceived_phones=true_perceived_1batch[:perceived_length_1batch],
+                    # TODO: check if the [:canonical/perceibed_lenght_1batch] is correct
+                    true_canonical_phones=true_canonical_1batch[
+                        :canonical_length_1batch
+                    ],
+                    true_perceived_phones=true_perceived_1batch[
+                        :perceived_length_1batch
+                    ],
                     pred_canonical_phones=pred_canonical_1batch,
                 )
 

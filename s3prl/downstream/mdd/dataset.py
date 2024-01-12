@@ -107,6 +107,17 @@ class L2ArcticDataset(Dataset):
         ), f"Sample rate mismatch: real {sr}, config {self.sample_rate}"
         return wav.view(-1)
 
+    def remove_multiple_sil(self, seq):
+        if len(seq) == 0:
+            return []
+        new_seq = [seq[0]]
+        for c in seq[1:]:
+            if new_seq[-1] == self.arpa_phones['sil'] and new_seq[-1] == c:
+                continue
+            new_seq.append(c)
+        return new_seq
+
+
     def _strip_arpa_phone(self, phone):
         """
         Strips stress and auxilliary symbols from an ARPA phone.
@@ -199,17 +210,20 @@ class L2ArcticDataset(Dataset):
                 perceived_phone = self.arpa_phones[
                     self._strip_arpa_phone(perceived_phone)
                 ]
-                # Remove parallel occurrences of phones to make the sequence generable by CTC loss
-                if len(canonical) == 0 or canonical_phone != self.arpa_phones['sil'] or canonical_phone != canonical[-1]:
-                    canonical.append(canonical_phone)
-                if len(perceived) == 0 or canonical_phone != self.arpa_phones['sil'] or perceived_phone != perceived[-1]:
-                    perceived.append(perceived_phone)
+
+                canonical.append(canonical_phone)
+                perceived.append(perceived_phone)
+
             except Exception as e:
                 print(f"Problematic file: {annotation_file}")
                 print(f"Problematic label: {repr(annotation)}")
                 raise e
 
-# This doesn't hold anymore because we are removing parallel padding 'sil' characters
+        # Remove parallel occurrences of phones to make the sequence generable by CTC loss
+        canonical = self.remove_multiple_sil(canonical)
+        perceived = self.remove_multiple_sil(perceived)
+
+# The assertion below doesn't hold anymore because we are removing parallel padding 'sil' characters
 # We are removing them because the sequences will get aligned anyway, so aligning
 # 'sil' characters are useless
 #             assert len(canonical) == len(
