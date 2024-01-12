@@ -98,7 +98,7 @@ class L2ArcticDataset(Dataset):
             {"item_root": item_root, "item_stem": annotation_stem}
             for item_root, annotation_stem in self.item_paths
         ]
-        self.item_paths = self.item_paths[:1]
+        self.item_paths = self.item_paths[:2]
 
     def _load_wav(self, wav_path):
         wav, sr = torchaudio.load(os.path.join(self.data_root, wav_path))

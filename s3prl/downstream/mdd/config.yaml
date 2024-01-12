@@ -39,7 +39,7 @@ optimizer:
 downstream_expert:
   datarc:
     num_workers: 1
-    train_batch_size: 1
+    train_batch_size: 2
     test_batch_size: 1
     dev_batch_size: 1
     data_root: '/home/xt0r3-user/cambridge/partii/dissertation/s3prl/data/l2arctic_release_v5.0'
