@@ -509,7 +509,7 @@ Exiting...
 
         records["loss"].append(loss)
 
-        if split == "train" and not self.logging['compute_train_metrics']:
+        if split == "train" and not self.logging_params['compute_train_metrics']:
             return loss
 
         # Get the true L1 and L2 phones

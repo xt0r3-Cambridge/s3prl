@@ -15,17 +15,8 @@ runner:
 
 optimizer:
   name: AdamW
-<<<<<<< HEAD
   lr: 3.e-3
   upstream_lr: 1.e-4
-  
-scheduler:
-  name: cosine_schedule_with_warmup
-  num_warmup_steps: 0
-=======
-  lr: 3.e-4
-  upstream_lr: 1.e-5
->>>>>>> Setting the scene for experiment #1
 
 specaug:
   adaptive: false
@@ -67,15 +58,9 @@ downstream_expert:
     lm: null  # no language model used
     lm_dict: null
     nbest: 1  # beam search returns top 1 best result  
-<<<<<<< HEAD
     beam_size: 1  # we retain 50 beams during beam search
     beam_size_token: null
     beam_threshold: 1
-=======
-    beam_size: 50  # we retain 50 beams during beam search
-    beam_size_token: null
-    beam_threshold: 50
->>>>>>> Setting the scene for experiment #1
     lm_weight: 2
     word_score: 0
     unk_score: -.inf
