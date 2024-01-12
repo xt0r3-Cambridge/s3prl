@@ -1,13 +1,13 @@
 # This gets loaded by `runner.py`
 # modelrc and datarc get passed to the model
 runner:
-  total_steps: 2500
+  total_steps: 8900
   gradient_clipping: 1
   gradient_accumulate_steps: 1
 
-  log_step: 50  # one epoch
-  eval_step: 100
-  save_step: 700
+  log_step: 89  # one epoch
+  eval_step: 890  # ten epochs
+  save_step: 890
   max_keep: 1
   eval_dataloaders:
     - dev
@@ -15,43 +15,51 @@ runner:
 
 optimizer:
   name: AdamW
+<<<<<<< HEAD
   lr: 3.e-3
   upstream_lr: 1.e-4
   
 scheduler:
   name: cosine_schedule_with_warmup
   num_warmup_steps: 0
+=======
+  lr: 3.e-4
+  upstream_lr: 1.e-5
+>>>>>>> Setting the scene for experiment #1
 
-# specaug:
-#   adaptive: false
-#   adaptive_number_ratio: 0.04
-#   adaptive_size_ratio: 0.04
-#   max_n_time_masks: 20
-#   apply_time_warp: true
-#   apply_time_mask: true
-#   apply_freq_mask: true
-#   time_warp_window: 5
-#   time_mask_width_range: [0, 40]
-#   freq_mask_width_range: [0, 50]
-#   num_freq_mask: 4
-#   num_time_mask: 2
+specaug:
+  adaptive: false
+  adaptive_number_ratio: 0.04
+  adaptive_size_ratio: 0.04
+  max_n_time_masks: 20
+  apply_time_warp: true
+  apply_time_mask: true
+  apply_freq_mask: true
+  time_warp_window: 5
+  time_mask_width_range: [0, 40]
+  freq_mask_width_range: [0, 50]
+  num_freq_mask: 4
+  num_time_mask: 2
 
 downstream_expert:
   datarc:
     num_workers: 1
-    train_batch_size: 2
+    train_batch_size: 32
     test_batch_size: 1
     dev_batch_size: 1
     data_root: '/home/xt0r3-user/cambridge/partii/dissertation/s3prl/data/l2arctic_release_v5.0'
     phone_path: './downstream/mdd/data'
-    # bucket_file: './data/len_for_bucket_timit' # run: `python preprocess/generate_len_for_bucket.py -i your_path_to/TIMIT -a .WAV -n len_for_bucket_timit`
     sample_rate: 44100  # this should not be changed, and this should match the sr of the audio in `data_root`
     train_dev_seed: 1337
-    compute_train_metrics: true
 
   modelrc: 
     extractor_blocks: 2
     extractor_dim: 384
+
+  logging_params:
+    log_sequences: false
+    compute_train_metrics: false
+
 
   decoder_params:
     lexicon: null
@@ -59,9 +67,15 @@ downstream_expert:
     lm: null  # no language model used
     lm_dict: null
     nbest: 1  # beam search returns top 1 best result  
+<<<<<<< HEAD
     beam_size: 1  # we retain 50 beams during beam search
     beam_size_token: null
     beam_threshold: 1
+=======
+    beam_size: 50  # we retain 50 beams during beam search
+    beam_size_token: null
+    beam_threshold: 50
+>>>>>>> Setting the scene for experiment #1
     lm_weight: 2
     word_score: 0
     unk_score: -.inf

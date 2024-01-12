@@ -65,6 +65,7 @@ class DownstreamExpert(nn.Module):
         self.datarc = downstream_expert["datarc"]
         self.modelrc = downstream_expert["modelrc"]
         self.decoder_params = downstream_expert["decoder_params"]
+        self.logging_params = downstream_expert["logging_params"]
 
         self.dataset = {}
         self.dataset["train"] = L2ArcticDataset("train", **self.datarc)
@@ -401,15 +402,16 @@ Exiting...
         corr_diag_pct = corr_diag / tp if tp > 0 else 0
         err_diag_pct = err_diag / tp if tp > 0 else 0
 
-        aligned_list = self.print_phones(
-            aligned_pred_canonical_phones,
-            aligned_true_canonical_phones,
-            aligned_true_perceived_phones,
-            return_list=True,
-        )
-        with open(self.verbose_log, "a") as f:
-            f.writelines([" | ".join(l) + "\n" for l in aligned_list])
-            f.write("\n\n")
+        if self.logging_params['log_sequences']:
+            aligned_list = self.print_phones(
+                aligned_pred_canonical_phones,
+                aligned_true_canonical_phones,
+                aligned_true_perceived_phones,
+                return_list=True,
+            )
+            with open(self.verbose_log, "a") as f:
+                f.writelines([" | ".join(l) + "\n" for l in aligned_list])
+                f.write("\n\n")
 
         return {
             "corr_diag_pct": corr_diag_pct,
@@ -507,7 +509,7 @@ Exiting...
 
         records["loss"].append(loss)
 
-        if split == "train":
+        if split == "train" and not self.logging['compute_train_metrics']:
             return loss
 
         # Get the true L1 and L2 phones
