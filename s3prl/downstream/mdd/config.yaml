@@ -50,7 +50,8 @@ downstream_expert:
     compute_train_metrics: true
 
   modelrc: 
-    none: None
+    extractor_blocks: 2
+    extractor_dim: 384
 
   decoder_params:
     lexicon: null
