@@ -87,9 +87,6 @@ class DownstreamExpert(nn.Module):
             **self.decoder_params,
         )
 
-        # Blank is the empty label. In this case, it is the label of silence
-        self.objective = nn.CTCLoss(blank=self.arpa_phones["<eps>"], reduction="mean")
-
         self.logging = Path(expdir) / "log.log"
         self.verbose_log = Path(expdir) / "verbose_log.log"
         self.best = defaultdict(lambda: 0)
@@ -494,14 +491,18 @@ Exiting...
         # We make the predictions with the fine-tuned models using the
         # upstream features
         pred_phone_logits = self.mdd_model(features)
-        pred_phone_distribution = log_softmax(pred_phone_logits, dim=-1)
+        pred_phone_logprobs = log_softmax(pred_phone_logits, dim=-1)
 
         # Compute the CTC loss
-        loss = self.objective(
-            pred_phone_distribution,
+        loss = torch.nn.functional.ctc_loss(
+            pred_phone_logprobs,
             true_canonical_phones,
             feature_lengths,
             canonical_lengths,
+            self.arpa_phones["<eps>"],
+            zero_infinity=True,
+            reduction="mean"
+
         )
 
         records["loss"].append(loss)
@@ -519,11 +520,11 @@ Exiting...
         # TODO: see if there are any CTC decoding algos that run on the GPU
         with torch.no_grad():
             # TODO: if this fails working, change this back to a log_softmax version
-            rearranged_predictions = rearrange(
-                pred_phone_distribution, "L B C -> B L C"
+            rearranged_logprobs = rearrange(
+                pred_phone_logprobs, "L B C -> B L C"
             )
             pred_sequences = self.decoder(
-                emissions=rearranged_predictions.cpu().contiguous(),
+                emissions=rearranged_logprobs.cpu().contiguous(),
                 # TODO: test if correct -- potentially change
                 lengths=feature_lengths,
                 # seq_lens=torch.ones(rearranged_predictions.shape[0]),
