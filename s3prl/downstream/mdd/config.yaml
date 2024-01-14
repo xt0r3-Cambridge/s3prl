@@ -15,8 +15,8 @@ runner:
 
 optimizer:
   name: AdamW
-  lr: 3.e-3
-  upstream_lr: 1.e-4
+  lr: 3.e-4
+  upstream_lr: 1.e-5
 
 specaug:
   adaptive: false

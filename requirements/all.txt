@@ -35,3 +35,4 @@ flashlight-text
 einops
 speechbrain 
 pyctcdecode
+jaxtyping 
