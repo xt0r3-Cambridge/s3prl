@@ -33,6 +33,7 @@ class Model(nn.Module):
                     nn.Linear(extractor_dim, extractor_dim)
                     for _ in range(extractor_blocks - 1)
                 ],
+                nn.LeakyReLU(),
                 nn.Linear(extractor_dim, output_class_num)
             )
         # init attributes
