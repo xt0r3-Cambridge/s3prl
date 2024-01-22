@@ -2,16 +2,16 @@
 # modelrc and datarc get passed to the model
 runner:
   total_steps: 8900
-  gradient_clipping: 1
-  gradient_accumulate_steps: 1
+  gradient_clipping: 5
+  gradient_accumulate_steps: 32
 
   log_step: 89  # one epoch
-  eval_step: 890  # ten epochs
-  save_step: 890
+  eval_step: 89  # one epoch
+  save_step: 89
   max_keep: 1
   eval_dataloaders:
-    - dev
-    # - test
+    # - dev
+    - test
 
 optimizer:
   name: Adam
@@ -34,13 +34,14 @@ specaug:
 
 downstream_expert:
   datarc:
-    num_workers: 1
-    train_batch_size: 32
+    num_workers: 4
+    train_batch_size: 1
     test_batch_size: 1
     dev_batch_size: 1
     data_root: '/home/xt0r3-user/cambridge/partii/dissertation/s3prl/data/l2arctic_release_v5.0'
     phone_path: './downstream/mdd/data'
     sample_rate: 44100  # this should not be changed, and this should match the sr of the audio in `data_root`
+    resample_rate: 16000  # this allows for data resampling
     train_dev_seed: 1337
 
   modelrc: 
@@ -48,7 +49,7 @@ downstream_expert:
     extractor_dim: 384
 
   logging_params:
-    log_sequences: false
+    log_sequences: true
     compute_train_metrics: false
 
 

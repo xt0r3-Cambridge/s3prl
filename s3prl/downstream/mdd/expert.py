@@ -290,7 +290,7 @@ hypothetical: {len(hypothetical_aligned)}
         We compute these as follows:
         1. We align the sequences (using edit-distance alignment) in the following ways:
             - align true perceieved and true canonical phones (true alignment)
-            - align true perceieved and predicted canonical phones (pred alignment)
+            - align true canonical and predicted canonical phones (pred alignment)
             - pad all of the alignments with empty "<eps>" characters such that all three strings are aligned
         2. Using the alignments, we compute the errors:
             - true positives: neither the true or the predicted canonical phone agree with the true perceived phone
@@ -503,7 +503,7 @@ Exiting...
             canonical_lengths,
             self.arpa_phones["<eps>"],
             zero_infinity=True,
-            reduction="mean"
+            reduction="sum"
 
         )
 

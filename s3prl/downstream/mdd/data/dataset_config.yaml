@@ -1,33 +1,26 @@
 train:
     speakers: [
         ABA,
+        SKA,
         YBAA,
-        ZHAA,
         BWC,
+        LXC,
         NCC,
-        TXHC,
         ASI,
         RRBI,
         SVBI,
-        TNI,
+        HJK,
         HKK,
         YDCK,
-        YKWK,
         EBVS,
+        ERMS,
         MBMPS,
-        NJS,
+        HQTV,
         PNV,
         THV,
-        TLV,
     ]
 dev: 
     speakers: [
-        SKA,
-        HJK,
-        HQTV,
     ]
 test:
-    speakers: [
-        ERMS,
-        LXC,
-    ]
+    speakers: ['TLV', 'NJS', 'TNI', 'TXHC', 'ZHAA', 'YKWK',]

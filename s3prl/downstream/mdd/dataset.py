@@ -53,6 +53,7 @@ class L2ArcticDataset(Dataset):
         # bucket_file,
         sample_rate=44100,
         train_dev_seed=1337,
+        resample_rate=None,
         **kwargs,
     ):
         super().__init__()
@@ -65,6 +66,7 @@ class L2ArcticDataset(Dataset):
 
         self.data_root = data_root
         self.sample_rate = sample_rate
+        self.resample_rate = resample_rate
 
         with open(Path(phone_path) / "dataset_config.yaml", "r") as stream:
             self.config = yaml.safe_load(stream)
@@ -103,16 +105,30 @@ class L2ArcticDataset(Dataset):
         assert (
             sr == self.sample_rate
         ), f"Sample rate mismatch: real {sr}, config {self.sample_rate}"
+        if self.resample_rate:
+            wav = torchaudio.functional.resample(wav, orig_freq=sr, new_freq=self.resample_rate)
         return wav.view(-1)
 
     def remove_multiple_sil(self, seq):
+        """
+        Removes leading, trailing and repeated 'sil' characters from the text
+        """
         if len(seq) == 0:
             return []
+
+        
         new_seq = [seq[0]]
         for c in seq[1:]:
             if new_seq[-1] == self.arpa_phones['sil'] and new_seq[-1] == c:
                 continue
             new_seq.append(c)
+        
+        # Strip leading and tailing silence
+        if len(new_seq) and new_seq[0] == self.arpa_phones['sil']:
+            new_seq = new_seq[1:]
+        if len(new_seq) and new_seq[-1] == self.arpa_phones['sil']:
+            new_seq = new_seq[:-1]
+
         return new_seq
 
 
