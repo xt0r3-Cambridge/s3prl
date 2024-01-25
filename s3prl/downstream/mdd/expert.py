@@ -12,7 +12,7 @@
 
 
 ###############
-# IMPORTATION #
+#   IMPORTS   #
 ###############
 import os
 import math
@@ -20,14 +20,18 @@ import random
 import yaml
 from collections import defaultdict, Counter
 from typing import Dict, List
+from jaxtyping import Float, Int64, jaxtyped
+import typeguard
 
 # -------------#
 import torch
 import torch.nn as nn
+from torch import Tensor
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 from torchaudio.models.decoder import ctc_decoder
 from torchaudio.functional import edit_distance
+from torch.nn.functional import log_softmax
 from pathlib import Path
 from einops import rearrange
 from speechbrain.decoders import ctc_greedy_decode
@@ -60,6 +64,8 @@ class DownstreamExpert(nn.Module):
         # These get loaded by `run_downstream.py` from `./config.yaml`
         self.datarc = downstream_expert["datarc"]
         self.modelrc = downstream_expert["modelrc"]
+        self.decoder_params = downstream_expert["decoder_params"]
+        self.logging_params = downstream_expert["logging_params"]
 
         self.dataset = {}
         self.dataset["train"] = L2ArcticDataset("train", **self.datarc)
@@ -78,10 +84,12 @@ class DownstreamExpert(nn.Module):
             self.arpa_phones = {phone.strip(): i for (i, phone) in arpa_tuples}
             self.arpa_phone_list = [phone for (i, phone) in arpa_tuples]
 
-        # Blank is the empty label. In this case, it is the label of silence
-        self.objective = nn.CTCLoss(blank=self.arpa_phones["sil"], reduction="mean")
+        self.decoder = ctc_decoder(
+            **self.decoder_params,
+        )
 
         self.logging = Path(expdir) / "log.log"
+        self.verbose_log = Path(expdir) / "verbose_log.log"
         self.best = defaultdict(lambda: 0)
 
     # Interface
@@ -109,13 +117,26 @@ class DownstreamExpert(nn.Module):
         ], f"Invalid split {split}. Expected 'train', 'dev' or 'test'."
         return DataLoader(
             self.dataset[split],
-            batch_size=self.datarc[f'{split}_batch_size'],#  - _make_grads in `runner.py` doesn't allow larger batches
+            batch_size=self.datarc[
+                f"{split}_batch_size"
+            ],  #  - _make_grads in `runner.py` doesn't allow larger batches
             shuffle=True,
             num_workers=self.datarc["num_workers"],
             drop_last=False,
             pin_memory=True,
             collate_fn=self.dataset[split].collate_fn,
         )
+
+    def print_phones(self, *args, return_list=False):
+        aligned_phones = [[] for i in range(len(args))]
+
+        for phones in zip(*args):
+            maxi = max([len(str(phone)) for phone in phones])
+            for i, phone in enumerate(phones):
+                aligned_phones[i].append(str(phone).center(maxi))
+
+        if return_list:
+            return aligned_phones
 
     def compute_alignment(self, reference, hypothetical, empty_token=-1):
         # TODO: make faster
@@ -219,15 +240,18 @@ hypothetical: {len(hypothetical_aligned)}
             "hypothetical_aligned": hypothetical_aligned,
         }
 
+    # @jaxtyped
+    # @typeguard.typechecked
     def compute_asr_metrics(
         self,
-        true_canonical_phones: torch.LongTensor,
-        pred_canonical_phones: torch.LongTensor,
-    ):
+        true_canonical_phones: List[Int64[Tensor, "seq_len1"]],
+        pred_canonical_phones: List[Int64[Tensor, "seq_len2"]],
+    ) -> Counter:
         """
         Computes the ASR metrics for the phone reconstruction of our model.
 
-        @returns: collections.Counter
+        Returns:
+            collections.Counter
             The updated running statistics, with keys:
 
             "WER" - word error rate
@@ -244,11 +268,13 @@ hypothetical: {len(hypothetical_aligned)}
         )
         return prediction_error_metrics
 
+    @jaxtyped
+    @typeguard.typechecked
     def compute_mdd_metrics(
         self,
-        true_perceived_phones: torch.LongTensor,
-        true_canonical_phones: torch.LongTensor,
-        pred_canonical_phones: torch.LongTensor,
+        true_perceived_phones: Int64[Tensor, "seq_len"],
+        true_canonical_phones: Int64[Tensor, "seq_len2"],
+        pred_canonical_phones: Int64[Tensor, "seq_len3"],
     ):
         """
         TODO: this only works for a single batch
@@ -264,7 +290,7 @@ hypothetical: {len(hypothetical_aligned)}
         We compute these as follows:
         1. We align the sequences (using edit-distance alignment) in the following ways:
             - align true perceieved and true canonical phones (true alignment)
-            - align true perceieved and predicted canonical phones (pred alignment)
+            - align true canonical and predicted canonical phones (pred alignment)
             - pad all of the alignments with empty "<eps>" characters such that all three strings are aligned
         2. Using the alignments, we compute the errors:
             - true positives: neither the true or the predicted canonical phone agree with the true perceived phone
@@ -376,6 +402,17 @@ Exiting...
         corr_diag_pct = corr_diag / tp if tp > 0 else 0
         err_diag_pct = err_diag / tp if tp > 0 else 0
 
+        if self.logging_params['log_sequences']:
+            aligned_list = self.print_phones(
+                aligned_pred_canonical_phones,
+                aligned_true_canonical_phones,
+                aligned_true_perceived_phones,
+                return_list=True,
+            )
+            with open(self.verbose_log, "a") as f:
+                f.writelines([" | ".join(l) + "\n" for l in aligned_list])
+                f.write("\n\n")
+
         return {
             "corr_diag_pct": corr_diag_pct,
             "err_diag_pct": err_diag_pct,
@@ -383,7 +420,7 @@ Exiting...
             "recall": recall,
             "f1_score": f1_score,
         }
-
+    
     # Interface
     """runner.py releavant code:
         loss = self.downstream.model(
@@ -393,15 +430,17 @@ Exiting...
         )
     """
 
+    @jaxtyped
+    @typeguard.typechecked
     def forward(
         self,
         split: str,
-        features: List[torch.FloatTensor],
-        true_perceived_phones: torch.LongTensor,
-        true_canonical_phones: torch.LongTensor,
-        perceived_lengths: torch.LongTensor,
-        canonical_lengths: torch.LongTensor,
-        records: Dict[str, List[any]],
+        features: List[Tensor],
+        true_perceived_phones: Int64[Tensor, "batch seq_len"],
+        true_canonical_phones: Int64[Tensor, "batch seq_len2"],
+        perceived_lengths: Int64[Tensor, "batch"],
+        canonical_lengths: Int64[Tensor, "batch"],
+        records: any,
         **kwargs,
     ):
         """
@@ -447,21 +486,31 @@ Exiting...
 
         # These can't go in the dataset collate_fn, because they are
         # produced by the upstream model.
+        # print(features)
         feature_lengths = torch.LongTensor([len(l) for l in features])
-        features = pad_sequence(features)
+        features = pad_sequence(features, padding_value=self.arpa_phones["<eps>"])
 
         # We make the predictions with the fine-tuned models using the
         # upstream features
-        pred_phone_distributions = self.mdd_model(features)
+        pred_phone_logits = self.mdd_model(features)
+        pred_phone_logprobs = log_softmax(pred_phone_logits, dim=-1)
 
         # Compute the CTC loss
-        loss = self.objective(
-            pred_phone_distributions,
+        loss = torch.nn.functional.ctc_loss(
+            pred_phone_logprobs,
             true_canonical_phones,
             feature_lengths,
             canonical_lengths,
+            self.arpa_phones["<eps>"],
+            zero_infinity=True,
+            reduction="sum"
+
         )
+
         records["loss"].append(loss)
+
+        if split == "train" and not self.logging_params['compute_train_metrics']:
+            return loss
 
         # Get the true L1 and L2 phones
 
@@ -471,51 +520,63 @@ Exiting...
         # I have not managed to find algos that run on the GPU that do the decoding
 
         # TODO: see if there are any CTC decoding algos that run on the GPU
-        relative_canonical_lengths = [
-            canonical_length / len(padded_true_canonical_phones)
-            for (canonical_length, padded_true_canonical_phones) in zip(
-                canonical_lengths, true_canonical_phones
+        with torch.no_grad():
+            # TODO: if this fails working, change this back to a log_softmax version
+            rearranged_logprobs = rearrange(
+                pred_phone_logprobs, "L B C -> B L C"
             )
-        ]
-
-        pred_canonical_phones = ctc_greedy_decode(
-            probabilities=rearrange(pred_phone_distributions, "L B C -> B C L"),
-            seq_lens=relative_canonical_lengths,
-            blank_id=0,
-        )
-
-        # TODO: remove
-        if split == 'train':
-            return loss
-
-        # TODO: check if there is a way to store the stats per speaker and aggregate at the end
-        #       instead of aggregating per batch
-
-        # Compute WER scores for the canonical label reconstruction
-        # This is an ASR task, so we use the WER metric to compute the phoneme error rate
-        asr_metrics = self.compute_asr_metrics(
-            true_canonical_phones=true_canonical_phones,
-            pred_canonical_phones=pred_canonical_phones,
-        )
-        records["per"].append(asr_metrics["WER"])
-
-        # TODO: refer to the paper we took this approach from
-        # https://arxiv.org/pdf/2203.15937.pdf
-
-        for true_canonical_1batch, true_perceived_1batch, pred_canonical_1batch in zip(
-            true_canonical_phones, true_perceived_phones, pred_canonical_phones
-        ):
-            mdd_metrics = self.compute_mdd_metrics(
-                true_canonical_phones=true_canonical_1batch,
-                true_perceived_phones=true_perceived_1batch,
-                pred_canonical_phones=pred_canonical_1batch,
+            pred_sequences = self.decoder(
+                emissions=rearranged_logprobs.cpu().contiguous(),
+                # TODO: test if correct -- potentially change
+                lengths=feature_lengths,
+                # seq_lens=torch.ones(rearranged_predictions.shape[0]),
+                # blank_id=self.arpa_phones["<eps>"],
             )
 
-            for k, v in mdd_metrics.items():
-                records[k].append(v)
-            # records["precision"].append(mdd_metrics["precision"])
-            # records["recall"].append(mdd_metrics["recall"])
-            # records["f1_score"].append(mdd_metrics["f1_score"])
+            # Remove multiple silences -- we know this can never occur in the dataset
+            pred_canonical_phones = [torch.LongTensor(self.dataset[split].remove_multiple_sil(seq[0].tokens)) for seq in pred_sequences]
+
+            # TODO: check if there is a way to store the stats per speaker and aggregate at the end
+            #       instead of aggregating per batch
+
+            # Compute WER scores for the canonical label reconstruction
+            # This is an ASR task, so we use the WER metric to compute the phoneme error rate
+            asr_metrics = self.compute_asr_metrics(
+                # TODO: check if the [:canonical_lenghts] is correct
+                true_canonical_phones=true_canonical_phones[:canonical_lengths],
+                pred_canonical_phones=pred_canonical_phones,
+            )
+            records["per"].append(asr_metrics["WER"])
+
+            # TODO: refer to the paper we took this approach from
+            # https://arxiv.org/pdf/2203.15937.pdf
+
+            for (
+                true_canonical_1batch,
+                true_perceived_1batch,
+                pred_canonical_1batch,
+                canonical_length_1batch,
+                perceived_length_1batch,
+            ) in zip(
+                true_canonical_phones,
+                true_perceived_phones,
+                pred_canonical_phones,
+                canonical_lengths,
+                perceived_lengths,
+            ):
+                mdd_metrics = self.compute_mdd_metrics(
+                    # TODO: check if the [:canonical/perceibed_lenght_1batch] is correct
+                    true_canonical_phones=true_canonical_1batch[
+                        :canonical_length_1batch
+                    ],
+                    true_perceived_phones=true_perceived_1batch[
+                        :perceived_length_1batch
+                    ],
+                    pred_canonical_phones=pred_canonical_1batch,
+                )
+
+                for k, v in mdd_metrics.items():
+                    records[k].append(v)
 
         return loss
 
@@ -567,7 +628,9 @@ Exiting...
         for metric in metrics:
             if metric in records:
                 avg_metric = torch.FloatTensor(records[metric]).mean().item()
-                logger.add_scalar(f"{prefix}{metric}", avg_metric, global_step=global_step)
+                logger.add_scalar(
+                    f"{prefix}{metric}", avg_metric, global_step=global_step
+                )
                 message_parts.append(f"{metric}:{avg_metric}")
 
         message_parts.append("\n")

@@ -16,6 +16,7 @@
 ###############
 import os
 import random
+from typing import List, Tuple
 import yaml
 
 # -------------#
@@ -27,6 +28,9 @@ from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data.dataset import Dataset
 from textgrid import TextGrid, IntervalTier
 from pathlib import Path
+from jaxtyping import Float, Int64, jaxtyped
+import typeguard
+from torch import Tensor
 
 # -------------#
 
@@ -49,6 +53,7 @@ class L2ArcticDataset(Dataset):
         # bucket_file,
         sample_rate=44100,
         train_dev_seed=1337,
+        resample_rate=None,
         **kwargs,
     ):
         super().__init__()
@@ -61,6 +66,7 @@ class L2ArcticDataset(Dataset):
 
         self.data_root = data_root
         self.sample_rate = sample_rate
+        self.resample_rate = resample_rate
 
         with open(Path(phone_path) / "dataset_config.yaml", "r") as stream:
             self.config = yaml.safe_load(stream)
@@ -84,21 +90,47 @@ class L2ArcticDataset(Dataset):
                 tg = TextGrid()
                 try:
                     tg.read(annotation_file)
-                    self.item_paths.append(
-                        {"item_root": item_root, "item_stem": annotation_file.stem}
-                    )
+                    self.item_paths.append((item_root, annotation_file.stem))
                 except Exception as e:
                     print(f"Skipping malformatted TextGrid file: {annotation_file}")
 
-        # TODO: remove -- added to test if we can overfit
-        # self.item_paths = self.item_paths[:30]
+        self.item_paths.sort()
+        self.item_paths = [
+            {"item_root": item_root, "item_stem": annotation_stem}
+            for item_root, annotation_stem in self.item_paths
+        ]
 
     def _load_wav(self, wav_path):
         wav, sr = torchaudio.load(os.path.join(self.data_root, wav_path))
         assert (
             sr == self.sample_rate
         ), f"Sample rate mismatch: real {sr}, config {self.sample_rate}"
+        if self.resample_rate:
+            wav = torchaudio.functional.resample(wav, orig_freq=sr, new_freq=self.resample_rate)
         return wav.view(-1)
+
+    def remove_multiple_sil(self, seq):
+        """
+        Removes leading, trailing and repeated 'sil' characters from the text
+        """
+        if len(seq) == 0:
+            return []
+
+        
+        new_seq = [seq[0]]
+        for c in seq[1:]:
+            if new_seq[-1] == self.arpa_phones['sil'] and new_seq[-1] == c:
+                continue
+            new_seq.append(c)
+        
+        # Strip leading and tailing silence
+        if len(new_seq) and new_seq[0] == self.arpa_phones['sil']:
+            new_seq = new_seq[1:]
+        if len(new_seq) and new_seq[-1] == self.arpa_phones['sil']:
+            new_seq = new_seq[:-1]
+
+        return new_seq
+
 
     def _strip_arpa_phone(self, phone):
         """
@@ -137,7 +169,11 @@ class L2ArcticDataset(Dataset):
         # TODO: change
         return len(self.item_paths)
 
-    def __getitem__(self, index):
+    @jaxtyped
+    @typeguard.typechecked
+    def __getitem__(
+        self, index
+    ) -> Tuple[Tensor, Int64[Tensor, "seq_len"], Int64[Tensor, "seq_len2"], int, int]:
         item_root = self.item_paths[index]["item_root"]
         item_stem = self.item_paths[index]["item_stem"]
 
@@ -182,23 +218,34 @@ class L2ArcticDataset(Dataset):
                 perceived_phone = phones[1]
 
             try:
-                canonical.append(
-                    self.arpa_phones[self._strip_arpa_phone(canonical_phone)]
-                )
-                perceived.append(
-                    self.arpa_phones[self._strip_arpa_phone(perceived_phone)]
-                )
+                canonical_phone = self.arpa_phones[
+                    self._strip_arpa_phone(canonical_phone)
+                ]
+                perceived_phone = self.arpa_phones[
+                    self._strip_arpa_phone(perceived_phone)
+                ]
+
+                canonical.append(canonical_phone)
+                perceived.append(perceived_phone)
+
             except Exception as e:
                 print(f"Problematic file: {annotation_file}")
                 print(f"Problematic label: {repr(annotation)}")
                 raise e
 
-            assert len(canonical) == len(
-                perceived
-            ), f"""Error: canonical and perceived phoneme sequences have differing lengths:
-canonical: {canonical}
-perceived: {perceived}
-"""
+        # Remove parallel occurrences of phones to make the sequence generable by CTC loss
+        canonical = self.remove_multiple_sil(canonical)
+        perceived = self.remove_multiple_sil(perceived)
+
+# The assertion below doesn't hold anymore because we are removing parallel padding 'sil' characters
+# We are removing them because the sequences will get aligned anyway, so aligning
+# 'sil' characters are useless
+#             assert len(canonical) == len(
+#                 perceived
+#             ), f"""Error: canonical and perceived phoneme sequences have differing lengths:
+# canonical: {canonical}
+# perceived: {perceived}
+# """
 
         # `runner.py` expects the returned items to be of form (wav_view, *others)
         return (
@@ -209,7 +256,17 @@ perceived: {perceived}
             len(perceived),
         )
 
-    def collate_fn(self, items):
+    @jaxtyped
+    @typeguard.typechecked
+    def collate_fn(
+        self, items
+    ) -> Tuple[
+        List[Tensor],
+        Int64[Tensor, "batch seq_len"],
+        Int64[Tensor, "batch seq_len2"],
+        Int64[Tensor, "batch"],
+        Int64[Tensor, "batch"],
+    ]:
         wav_views = []
         canonicals = []
         perceiveds = []

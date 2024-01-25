@@ -36,3 +36,4 @@ einops
 speechbrain 
 praat-textgrids
 textgrid
+jaxtyping 
