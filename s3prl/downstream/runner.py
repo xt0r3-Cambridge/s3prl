@@ -256,6 +256,12 @@ class Runner():
             from .specaug import SpecAug
             specaug = SpecAug(**self.config["specaug"])
 
+        # NEFTune
+        neftune = None
+        if self.config.get('neftune'):
+            from .augment_utils.neftune import NEFTune
+            neftune = NEFTune(**self.config["neftune"])
+
         # progress bar
         tqdm_file = sys.stderr if is_leader_process() else open(os.devnull, 'w')
         pbar = tqdm(total=self.config['runner']['total_steps'], dynamic_ncols=True, desc='overall', file=tqdm_file)
@@ -299,6 +305,9 @@ class Runner():
                             with torch.no_grad():
                                 features = self.upstream.model(wavs)
                         features = self.featurizer.model(wavs, features)
+
+                        if neftune:
+                            features = neftune(features)
 
                         if specaug:
                             features, _ = specaug(features)
