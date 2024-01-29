@@ -18,6 +18,11 @@ optimizer:
   lr: 3.e-4
   upstream_lr: 1.e-5
 
+phase_perturbation:
+  noise_scale: 0.1
+  num_stft_frequencies: 1024
+  hop_length: 128
+
 specaug:
   adaptive: false
   adaptive_number_ratio: 0.04
