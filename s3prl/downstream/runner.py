@@ -262,6 +262,12 @@ class Runner():
             from .augment_utils.neftune import NEFTune
             neftune = NEFTune(**self.config["neftune"])
 
+        # PhasePerturbation
+        phase_perturbation = None
+        if self.config.get('phase_perturbation'):
+            from .augment_utils.phase_perturbation import PhasePerturbation
+            phase_perturbation = PhasePerturbation(**self.config["phase_perturbation"])
+
         # progress bar
         tqdm_file = sys.stderr if is_leader_process() else open(os.devnull, 'w')
         pbar = tqdm(total=self.config['runner']['total_steps'], dynamic_ncols=True, desc='overall', file=tqdm_file)
@@ -297,6 +303,9 @@ class Runner():
                     global_step = pbar.n + 1
 
                     wavs = [torch.FloatTensor(wav).to(self.args.device) for wav in wavs]
+
+                    if phase_perturbation:
+                        wavs = phase_perturbation(wavs)
 
                     with torch.cuda.amp.autocast(enabled=amp):
                         if self.upstream.trainable:
