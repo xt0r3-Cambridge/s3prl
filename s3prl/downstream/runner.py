@@ -328,7 +328,7 @@ class Runner():
                     wavs = [torch.FloatTensor(wav).to(self.args.device) for wav in wavs]
 
                     if specaug:
-                        transform = Spectrogram(num_stft_frequencies=512)
+                        transform = Spectrogram(num_stft_frequencies=2048)
                         aug_specs = [specaug(einops.rearrange(transform.wav_to_spec(wav), "h w complex -> complex h w"))[0] for wav in wavs]
                         wavs = [transform.spec_to_wav(torch.complex(specs[0], specs[1])) for specs in aug_specs]
                         del aug_specs

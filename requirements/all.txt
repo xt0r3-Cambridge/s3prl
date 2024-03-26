@@ -33,7 +33,7 @@ more_itertools
 tensorboard
 flashlight-text
 einops
-speechbrain 
+speechbrain<=0.5.6
 praat-textgrids
 textgrid
 jaxtyping 
