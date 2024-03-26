@@ -9,6 +9,7 @@ import tempfile
 import importlib
 from pathlib import Path
 
+import einops
 import torch
 import torchaudio
 import numpy as np
@@ -19,10 +20,12 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import is_initialized, get_rank, get_world_size
 
 from s3prl import hub
+from s3prl.downstream.augment_utils.spectrogram import Spectrogram
 from s3prl.optimizers import get_optimizer
 from s3prl.schedulers import get_scheduler
 from s3prl.upstream.interfaces import Featurizer
 from s3prl.utility.helper import is_leader_process, get_model_state, show, defaultdict
+
 
 from huggingface_hub import HfApi, HfFolder, Repository
 
@@ -250,23 +253,43 @@ class Runner():
         if self.config.get('scheduler'):
             scheduler = self._get_scheduler(optimizer)
 
-        # specaug
+
         specaug = None
-        if self.config.get('specaug'):
-            from .specaug import SpecAug
-            specaug = SpecAug(**self.config["specaug"])
-
-        # NEFTune
+        timedomain_specaug = None
+        env_corrupt = None
+        specaug_features = None
         neftune = None
-        if self.config.get('neftune'):
-            from .augment_utils.neftune import NEFTune
-            neftune = NEFTune(**self.config["neftune"])
-
-        # PhasePerturbation
         phase_perturbation = None
-        if self.config.get('phase_perturbation'):
-            from .augment_utils.phase_perturbation import PhasePerturbation
-            phase_perturbation = PhasePerturbation(**self.config["phase_perturbation"])
+        if self.config.get('augmentation'):
+            aug_config = self.config['augmentation']
+            # specaug
+            if aug_config.get('specaug'):
+                from .specaug import SpecAug
+                specaug = SpecAug(**aug_config["specaug"])
+
+            if aug_config.get('timedomain_specaug'):
+                from speechbrain.lobes.augment import TimeDomainSpecAugment
+                timedomain_specaug = TimeDomainSpecAugment(**aug_config["timedomain_specaug"])
+
+            # Env Corrupt
+            if aug_config.get('env_corrupt'):
+                from speechbrain.lobes.augment import EnvCorrupt
+                env_corrupt = EnvCorrupt(**aug_config["env_corrupt"])
+
+            # specaug features
+            if aug_config.get('specaug_features'):
+                from .specaug import SpecAug
+                specaug_features = SpecAug(**aug_config["specaug_features"])
+
+            # NEFTune
+            if aug_config.get('neftune'):
+                from .augment_utils.neftune import NEFTune
+                neftune = NEFTune(**aug_config["neftune"])
+
+            # PhasePerturbation
+            if aug_config.get('phase_perturbation'):
+                from .augment_utils.phase_perturbation import PhasePerturbation
+                phase_perturbation = PhasePerturbation(**aug_config["phase_perturbation"])
 
         # progress bar
         tqdm_file = sys.stderr if is_leader_process() else open(os.devnull, 'w')
@@ -304,6 +327,23 @@ class Runner():
 
                     wavs = [torch.FloatTensor(wav).to(self.args.device) for wav in wavs]
 
+                    if specaug:
+                        transform = Spectrogram(num_stft_frequencies=512)
+                        aug_specs = [specaug(einops.rearrange(transform.wav_to_spec(wav), "h w complex -> complex h w"))[0] for wav in wavs]
+                        wavs = [transform.spec_to_wav(torch.complex(specs[0], specs[1])) for specs in aug_specs]
+                        del aug_specs
+                    
+                    if timedomain_specaug or env_corrupt:
+                        wav_lens = torch.tensor([len(wav) for wav in wavs], device=self.args.device, dtype=torch.long)
+                        wavs = torch.nn.utils.rnn.pad_sequence(wavs, batch_first=True)
+                        if timedomain_specaug:
+                            wavs = timedomain_specaug(wavs, wav_lens)
+                        if env_corrupt:
+                            wavs = env_corrupt(wavs, wav_lens)
+                        wavs = [wav[:wav_len] for wav, wav_len in zip(wavs, wav_lens)]
+                        del wav_lens
+
+
                     if phase_perturbation:
                         wavs = phase_perturbation(wavs)
 
@@ -318,8 +358,8 @@ class Runner():
                         if neftune:
                             features = neftune(features)
 
-                        if specaug:
-                            features, _ = specaug(features)
+                        if specaug_features:
+                            features, _ = specaug_features(features)
 
                         loss = self.downstream.model(
                             train_split,

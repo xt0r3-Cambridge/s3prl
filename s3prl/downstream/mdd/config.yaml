@@ -1,7 +1,7 @@
 # This gets loaded by `runner.py`
 # modelrc and datarc get passed to the model
 runner:
-  total_steps: 8900
+  total_steps: 1780  # run for 20 epochs
   gradient_clipping: 5
   gradient_accumulate_steps: 32
 
@@ -10,7 +10,7 @@ runner:
   save_step: 89
   max_keep: 1
   eval_dataloaders:
-    # - dev
+    - dev
     - test
 
 optimizer:
@@ -18,24 +18,45 @@ optimizer:
   lr: 3.e-4
   upstream_lr: 1.e-5
 
-phase_perturbation:
-  noise_scale: 0.1
-  num_stft_frequencies: 1024
-  hop_length: 128
+# phase_perturbation:
+#   noise_scale: 0.1
+#   num_stft_frequencies: 1024
+#   hop_length: 128
 
-specaug:
-  adaptive: false
-  adaptive_number_ratio: 0.04
-  adaptive_size_ratio: 0.04
-  max_n_time_masks: 20
-  apply_time_warp: true
-  apply_time_mask: true
-  apply_freq_mask: true
-  time_warp_window: 5
-  time_mask_width_range: [0, 40]
-  freq_mask_width_range: [0, 50]
-  num_freq_mask: 4
-  num_time_mask: 2
+augmentation:
+  # specaug:
+  #   adaptive: false
+  #   adaptive_number_ratio: 0.04
+  #   adaptive_size_ratio: 0.04
+  #   max_n_time_masks: 20
+  #   apply_time_warp: true
+  #   apply_time_mask: true
+  #   apply_freq_mask: true
+  #   time_warp_window: 5
+  #   time_mask_width_range: [0, 40]
+  #   freq_mask_width_range: [0, 50]
+  #   num_freq_mask: 4
+  #   num_time_mask: 2
+
+  # env_corrupt:
+  #   reverb_prob: 1.0
+  #   babble_prob: 1.0
+  #   noise_prob: 1.0
+  #   openrir_folder: null
+  #   openrir_max_noise_len: null
+  #   reverb_csv: null
+  #   noise_csv: null
+  #   noise_num_workers: 0
+  #   babble_speaker_count: 0
+  #   babble_snr_low: 0
+  #   babble_snr_high: 0
+  #   noise_snr_low: 0
+  #   noise_snr_high: 0
+  #   rir_scale_factor: 1.0
+
+  # timedomain_specaug:
+  #   speeds: [95, 100, 105]
+  #   sample_rate: 16000
 
 downstream_expert:
   datarc:
@@ -54,7 +75,7 @@ downstream_expert:
     extractor_dim: 384
 
   logging_params:
-    log_sequences: true
+    log_sequences: false
     compute_train_metrics: false
 
 

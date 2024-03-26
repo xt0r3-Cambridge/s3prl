@@ -82,11 +82,17 @@ class L2ArcticDataset(Dataset):
         self.item_paths = []
         for speaker in self.config[split]["speakers"]:
             item_root = Path(self.data_root) / speaker
-            for annotation_file in (item_root / "annotation").iterdir():
+            files = sorted((item_root / "annotation").iterdir())
+            if split in ['train', 'dev']:
+                generator = torch.Generator().manual_seed(train_dev_seed)
+                train_dev = torch.utils.data.random_split(files, [0.9, 0.1])
+                files = train_dev[0 if split == 'train' else 1]
+            for annotation_file in files:
                 # Only save files that are formatted well
                 # We expect two malformatted files
                 # - YDCK/annotation/arctic_a0272.TextGrid
                 # - YDCK/annotation/arctic_a0209.TextGrid
+                
                 tg = TextGrid()
                 try:
                     tg.read(annotation_file)

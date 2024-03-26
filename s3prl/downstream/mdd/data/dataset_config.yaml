@@ -1,26 +1,57 @@
 train:
+    speakers:
+        [
+            ABA,
+            SKA,
+            YBAA,
+            BWC,
+            LXC,
+            NCC,
+            ASI,
+            RRBI,
+            SVBI,
+            HJK,
+            HKK,
+            YDCK,
+            EBVS,
+            ERMS,
+            MBMPS,
+            HQTV,
+            PNV,
+            THV,
+        ]
+dev:
     speakers: [
-        ABA,
-        SKA,
-        YBAA,
-        BWC,
-        LXC,
-        NCC,
-        ASI,
-        RRBI,
-        SVBI,
-        HJK,
-        HKK,
-        YDCK,
-        EBVS,
-        ERMS,
-        MBMPS,
-        HQTV,
-        PNV,
-        THV,
-    ]
-dev: 
-    speakers: [
-    ]
+            ABA,
+            SKA,
+            YBAA,
+            BWC,
+            LXC,
+            NCC,
+            ASI,
+            RRBI,
+            SVBI,
+            HJK,
+            HKK,
+            YDCK,
+            EBVS,
+            ERMS,
+            MBMPS,
+            HQTV,
+            PNV,
+            THV,
+        ]
 test:
-    speakers: ['TLV', 'NJS', 'TNI', 'TXHC', 'ZHAA', 'YKWK',]
+    speakers: [
+        NJS,
+        TLV,
+        TNI,
+        TXHC,
+        YKWK,
+        ZHAA,
+    ]
+
+
+
+
+
