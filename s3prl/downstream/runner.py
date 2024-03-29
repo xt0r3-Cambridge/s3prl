@@ -256,7 +256,7 @@ class Runner():
 
         specaug = None
         timedomain_specaug = None
-        env_corrupt = None
+        add_noise = None
         specaug_features = None
         neftune = None
         phase_perturbation = None
@@ -271,10 +271,10 @@ class Runner():
                 from speechbrain.lobes.augment import TimeDomainSpecAugment
                 timedomain_specaug = TimeDomainSpecAugment(**aug_config["timedomain_specaug"])
 
-            # Env Corrupt
-            if aug_config.get('env_corrupt'):
-                from speechbrain.lobes.augment import EnvCorrupt
-                env_corrupt = EnvCorrupt(**aug_config["env_corrupt"])
+            # Add Gaussian Noise
+            if aug_config.get('add_noise'):
+                from .augment_utils.add_noise import AddNoise
+                add_noise = AddNoise(**aug_config["add_noise"], device=self.args.device)
 
             # specaug features
             if aug_config.get('specaug_features'):
@@ -333,13 +333,13 @@ class Runner():
                         wavs = [transform.spec_to_wav(torch.complex(specs[0], specs[1])) for specs in aug_specs]
                         del aug_specs
                     
-                    if timedomain_specaug or env_corrupt:
+                    if timedomain_specaug or add_noise:
                         wav_lens = torch.tensor([len(wav) for wav in wavs], device=self.args.device, dtype=torch.long)
                         wavs = torch.nn.utils.rnn.pad_sequence(wavs, batch_first=True)
                         if timedomain_specaug:
                             wavs = timedomain_specaug(wavs, wav_lens)
-                        if env_corrupt:
-                            wavs = env_corrupt(wavs, wav_lens)
+                        if add_noise:
+                            wavs = add_noise(wavs, wav_lens)
                         wavs = [wav[:wav_len] for wav, wav_len in zip(wavs, wav_lens)]
                         del wav_lens
 

@@ -165,10 +165,3 @@ docs/source/_autosummary/
 # ckpts and hidden states
 sample_hidden_states/
 converted_ckpts/
-
-# testing notebook 
-s3prl/downstream/mdd/testing.ipynb
-s3prl/downstream/mdd/test_alignment.ipynb
-
-# All notebooks 
-*.ipynb

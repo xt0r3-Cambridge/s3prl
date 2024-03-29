@@ -6,7 +6,6 @@
 #   Copyright    [ Copyleft(c) ]
 """*********************************************************************************************"""
 # Time-Domain Spec Augmentation implementation for SUPERB Author: Kornel Szabo, University of Cambridge
-# Source: https://arxiv.org/pdf/2312.08571.pdf
 
 ###############
 #   IMPORTS   #

@@ -53,25 +53,19 @@ augmentation:
   #   num_stft_frequencies: 2048
   #   hop_length: 128
 
-  # env_corrupt:
-  #   reverb_prob: 1.0
-  #   babble_prob: 1.0
-  #   noise_prob: 1.0
-  #   openrir_folder: null
-  #   openrir_max_noise_len: null
-  #   reverb_csv: null
-  #   noise_csv: null
-  #   noise_num_workers: 0
-  #   babble_speaker_count: 0
-  #   babble_snr_low: 0
-  #   babble_snr_high: 0
-  #   noise_snr_low: 0
-  #   noise_snr_high: 0
-  #   rir_scale_factor: 1.0
+  add_noise:
+    prob: 0.9
+    snr_low: 0.0
+    snr_high: 1.0
+    seed: 1337
+
 
   # timedomain_specaug:
   #   speeds: [95, 100, 105]
   #   sample_rate: 16000
+
+  # neftune:
+  #   noise_alpha: 0.1
 
 downstream_expert:
   datarc:
