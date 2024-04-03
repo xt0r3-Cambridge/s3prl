@@ -53,11 +53,17 @@ augmentation:
   #   num_stft_frequencies: 2048
   #   hop_length: 128
 
-  add_noise:
-    prob: 0.9
-    snr_low: 0.0
-    snr_high: 1.0
-    seed: 1337
+  # add_noise:
+  #   prob: 0.9
+  #   snr_low: 0.0
+  #   snr_high: 1.0
+  #   seed: 1337
+
+  vltp:
+    sample_rate: 44100
+    noise_low: 0.9
+    noise_high: 1.1
+    f_hi: 7000
 
 
   # timedomain_specaug:
