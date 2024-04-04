@@ -261,6 +261,7 @@ class Runner():
         neftune = None
         phase_perturbation = None
         vltp = None
+        tempo_perturbation = None
         if self.config.get('augmentation'):
             aug_config = self.config['augmentation']
             # specaug
@@ -292,9 +293,15 @@ class Runner():
                 from .augment_utils.phase_perturbation import PhasePerturbation
                 phase_perturbation = PhasePerturbation(**aug_config["phase_perturbation"])
 
+            # Vocal-Tract Length Perturbation
             if aug_config.get('vltp'):
                 from .augment_utils.vltp import VLTP
                 vltp = VLTP(**aug_config['vltp'])
+
+            # Tempo pertubation
+            if aug_config.get('tempo_perturbation'):
+                from .augment_utils.tempo_perturbation import TempoPerturbation
+                tempo_perturbation = TempoPerturbation(**aug_config['tempo_perturbation'])
 
         # progress bar
         tqdm_file = sys.stderr if is_leader_process() else open(os.devnull, 'w')
@@ -353,6 +360,9 @@ class Runner():
 
                     if vltp:
                         wavs = vltp(wavs)
+
+                    if tempo_perturbation:
+                        wavs = tempo_perturbation(wavs)
 
                     with torch.cuda.amp.autocast(enabled=amp):
                         if self.upstream.trainable:

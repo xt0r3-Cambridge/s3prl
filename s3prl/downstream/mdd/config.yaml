@@ -59,11 +59,20 @@ augmentation:
   #   snr_high: 1.0
   #   seed: 1337
 
-  vltp:
-    sample_rate: 44100
-    noise_low: 0.9
-    noise_high: 1.1
-    f_hi: 7000
+  # vltp:
+  #   sample_rate: 16000
+  #   noise_low: 0.9
+  #   noise_high: 1.1
+  #   f_hi: 7000
+
+  tempo_perturbation: 
+    N: 1024
+    sample_rate: 16000
+    alpha_high: 1.2
+    alpha_low: 0.5
+    delta_max: 512
+    prob: 0.95
+
 
 
   # timedomain_specaug:
