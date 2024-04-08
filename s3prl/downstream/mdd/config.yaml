@@ -59,6 +59,10 @@ augmentation:
   #   snr_high: 1.0
   #   seed: 1337
 
+  add_reverb:
+    dataset_path: /home/xt0r3-user/cambridge/partii/dissertation/s3prl/data/rir/Audio
+    prob: 1.0
+
   # vltp:
   #   sample_rate: 16000
   #   noise_low: 0.9
