@@ -85,7 +85,7 @@ class L2ArcticDataset(Dataset):
             files = sorted((item_root / "annotation").iterdir())
             if split in ['train', 'dev']:
                 generator = torch.Generator().manual_seed(train_dev_seed)
-                train_dev = torch.utils.data.random_split(files, [0.9, 0.1])
+                train_dev = torch.utils.data.random_split(files, [0.9, 0.1], generator=generator)
                 files = train_dev[0 if split == 'train' else 1]
             for annotation_file in files:
                 # Only save files that are formatted well
