@@ -20,54 +20,54 @@ optimizer:
 
 
 augmentation:
-  # specaug:
-  #   adaptive: false
-  #   adaptive_number_ratio: 0.04
-  #   adaptive_size_ratio: 0.04
-  #   max_n_time_masks: 20
-  #   apply_time_warp: true
-  #   apply_time_mask: true
-  #   apply_freq_mask: true
-  #   time_warp_window: 5
-  #   time_mask_width_range: [0, 40]
-  #   freq_mask_width_range: [0, 5]
-  #   num_freq_mask: 4
-  #   num_time_mask: 2
+  specaug:
+    adaptive: false
+    adaptive_number_ratio: 0.04
+    adaptive_size_ratio: 0.04
+    max_n_time_masks: 20
+    apply_time_warp: true
+    apply_time_mask: true
+    apply_freq_mask: true
+    time_warp_window: 5
+    time_mask_width_range: [0, 40]
+    freq_mask_width_range: [0, 5]
+    num_freq_mask: 4
+    num_time_mask: 2
 
-  # specaug_features:
-  #   adaptive: false
-  #   adaptive_number_ratio: 0.04
-  #   adaptive_size_ratio: 0.04
-  #   max_n_time_masks: 20
-  #   apply_time_warp: true
-  #   apply_time_mask: true
-  #   apply_freq_mask: true
-  #   time_warp_window: 5
-  #   time_mask_width_range: [0, 40]
-  #   freq_mask_width_range: [0, 5]
-  #   num_freq_mask: 4
-  #   num_time_mask: 2
+  specaug_features:
+    adaptive: false
+    adaptive_number_ratio: 0.04
+    adaptive_size_ratio: 0.04
+    max_n_time_masks: 20
+    apply_time_warp: true
+    apply_time_mask: true
+    apply_freq_mask: true
+    time_warp_window: 5
+    time_mask_width_range: [0, 40]
+    freq_mask_width_range: [0, 5]
+    num_freq_mask: 4
+    num_time_mask: 2
 
-  # phase_perturbation:
-  #   noise_scale: 0.1
-  #   num_stft_frequencies: 2048
-  #   hop_length: 128
+  phase_perturbation:
+    noise_scale: 0.1
+    num_stft_frequencies: 2048
+    hop_length: 128
 
-  # add_noise:
-  #   prob: 0.9
-  #   snr_low: 0.0
-  #   snr_high: 1.0
-  #   seed: 1337
+  add_noise:
+    prob: 0.9
+    snr_low: 0.0
+    snr_high: 1.0
+    seed: 1337
 
   add_reverb:
     dataset_path: /home/xt0r3-user/cambridge/partii/dissertation/s3prl/data/rir/Audio
     prob: 1.0
 
-  # vltp:
-  #   sample_rate: 16000
-  #   noise_low: 0.9
-  #   noise_high: 1.1
-  #   f_hi: 7000
+  vltp:
+    sample_rate: 16000
+    noise_low: 0.9
+    noise_high: 1.1
+    f_hi: 7000
 
   tempo_perturbation: 
     N: 1024
@@ -77,14 +77,12 @@ augmentation:
     delta_max: 512
     prob: 0.95
 
+  timedomain_specaug:
+    speeds: [95, 100, 105]
+    sample_rate: 16000
 
-
-  # timedomain_specaug:
-  #   speeds: [95, 100, 105]
-  #   sample_rate: 16000
-
-  # neftune:
-  #   noise_alpha: 0.1
+  neftune:
+    noise_alpha: 0.1
 
 downstream_expert:
   datarc:

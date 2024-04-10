@@ -27,7 +27,6 @@ class AddNoise(torch.nn.Module):
         prob: float = 1.0,
         snr_low: float = 0.0,
         snr_high: float = 0.1,
-        seed: int = 1337,
     ):
         """
         Creates an object that adds Gaussian noise to the input signal.
@@ -35,8 +34,6 @@ class AddNoise(torch.nn.Module):
         """
         super(AddNoise, self).__init__()
         self.device = device
-        self.seed = seed
-        self.rng = torch.Generator(device=self.device).manual_seed(seed)
         self.prob = prob
         self.snr_low = snr_low
         self.snr_high = snr_high
@@ -69,7 +66,7 @@ class AddNoise(torch.nn.Module):
         # We sample it wav_len times and that will be the initial noise
         std = (
             torch.ones(wavs.size()[0], device=self.device)
-            .uniform_(self.snr_low, self.snr_high, generator=self.rng)
+            .uniform_(self.snr_low, self.snr_high, )
             .unsqueeze(-1)
             .expand(-1, wavs.size()[-1])
         )
