@@ -344,6 +344,15 @@ class Runner():
                         aug_specs = [specaug(einops.rearrange(transform.wav_to_spec(wav), "h w complex -> complex h w"))[0] for wav in wavs]
                         wavs = [transform.spec_to_wav(torch.complex(specs[0], specs[1])) for specs in aug_specs]
                         del aug_specs
+
+                    if phase_perturbation:
+                        wavs = phase_perturbation(wavs)
+
+                    if vltp:
+                        wavs = vltp(wavs)
+
+                    if tempo_perturbation:
+                        wavs = tempo_perturbation(wavs)
                     
                     if timedomain_specaug or add_noise:
                         wav_lens = torch.tensor([len(wav) for wav in wavs], device=self.args.device, dtype=torch.long)
@@ -354,15 +363,6 @@ class Runner():
                             wavs = add_noise(wavs, wav_lens)
                         wavs = [wav[:wav_len] for wav, wav_len in zip(wavs, wav_lens)]
                         del wav_lens
-
-                    if phase_perturbation:
-                        wavs = phase_perturbation(wavs)
-
-                    if vltp:
-                        wavs = vltp(wavs)
-
-                    if tempo_perturbation:
-                        wavs = tempo_perturbation(wavs)
 
                     with torch.cuda.amp.autocast(enabled=amp):
                         if self.upstream.trainable:
