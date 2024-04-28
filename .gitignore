@@ -56,7 +56,7 @@ coverage.xml
 *.pot
 
 # Django stuff:
-*.log
+# *.log
 local_settings.py
 db.sqlite3
 
@@ -136,6 +136,7 @@ Raw
 CMU_MOSI.zip
 libri_alignment.zip
 data
+*verbose_log*
 
 # checkpoints
 *.ckpt

@@ -1,0 +1,9 @@
+mdd/train-|step:50|loss:5.118927001953125|
+mdd/train-|step:100|loss:0.875478982925415|
+mdd/dev-|step:100|loss:0.11900588870048523|per:2.941176414489746|corr_diag_pct:1.0|err_diag_pct:0.0|f1_score:0.8999999761581421|precision:0.8333333730697632|recall:1.0|
+mdd/train-|step:150|loss:0.062278371304273605|
+mdd/train-|step:200|loss:0.03297516703605652|
+mdd/dev-|step:200|loss:0.001394313876517117|per:0.0|corr_diag_pct:1.0|err_diag_pct:0.0|f1_score:1.0|precision:1.0|recall:1.0|
+mdd/train-|step:250|loss:0.018240662291646004|
+mdd/train-|step:300|loss:0.01100547332316637|
+mdd/dev-|step:300|loss:0.005809534341096878|per:0.0|corr_diag_pct:1.0|err_diag_pct:0.0|f1_score:1.0|precision:1.0|recall:1.0|
