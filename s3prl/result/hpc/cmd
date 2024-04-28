@@ -1,0 +1,1 @@
+for i in $(ls /rds/user/kgs37/hpc-work/s3prl/s3prl/downstream/mdd | grep .*.yaml | grep -v config); do (for j in {1..5}; do sbatch aug_submit.yaml "$j" "${i::-5}"; done); done

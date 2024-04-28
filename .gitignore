@@ -128,7 +128,7 @@ dev-clean
 test-clean
 train-clean-360
 libri_*
-result
+# result
 result_*
 log
 log_*
