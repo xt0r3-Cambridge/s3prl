@@ -402,7 +402,7 @@ Exiting...
         corr_diag_pct = corr_diag / tp if tp > 0 else 0
         err_diag_pct = err_diag / tp if tp > 0 else 0
 
-        if self.logging_params['log_sequences']:
+        if self.logging_params["log_sequences"]:
             aligned_list = self.print_phones(
                 aligned_pred_canonical_phones,
                 aligned_true_canonical_phones,
@@ -419,8 +419,12 @@ Exiting...
             "precision": precision,
             "recall": recall,
             "f1_score": f1_score,
+            "tp": tp,
+            "fp": fp,
+            "tn": tn,
+            "fn": fn,
         }
-    
+
     # Interface
     """runner.py releavant code:
         loss = self.downstream.model(
@@ -503,13 +507,12 @@ Exiting...
             canonical_lengths,
             self.arpa_phones["<eps>"],
             zero_infinity=True,
-            reduction="sum"
-
+            reduction="sum",
         )
 
-        records["loss"].append(loss)
+        records["loss"].append(loss.detach())
 
-        if split == "train" and not self.logging_params['compute_train_metrics']:
+        if split == "train" and not self.logging_params["compute_train_metrics"]:
             return loss
 
         # Get the true L1 and L2 phones
@@ -522,9 +525,7 @@ Exiting...
         # TODO: see if there are any CTC decoding algos that run on the GPU
         with torch.no_grad():
             # TODO: if this fails working, change this back to a log_softmax version
-            rearranged_logprobs = rearrange(
-                pred_phone_logprobs, "L B C -> B L C"
-            )
+            rearranged_logprobs = rearrange(pred_phone_logprobs, "L B C -> B L C")
             pred_sequences = self.decoder(
                 emissions=rearranged_logprobs.cpu().contiguous(),
                 # TODO: test if correct -- potentially change
@@ -534,7 +535,10 @@ Exiting...
             )
 
             # Remove multiple silences -- we know this can never occur in the dataset
-            pred_canonical_phones = [torch.LongTensor(self.dataset[split].remove_multiple_sil(seq[0].tokens)) for seq in pred_sequences]
+            pred_canonical_phones = [
+                torch.LongTensor(self.dataset[split].remove_multiple_sil(seq[0].tokens))
+                for seq in pred_sequences
+            ]
 
             # TODO: check if there is a way to store the stats per speaker and aggregate at the end
             #       instead of aggregating per batch
@@ -547,6 +551,9 @@ Exiting...
                 pred_canonical_phones=pred_canonical_phones,
             )
             records["per"].append(asr_metrics["WER"])
+            for metric, value in asr_metrics.items():
+                if metric != "WER":
+                    records[metric].append(value)
 
             # TODO: refer to the paper we took this approach from
             # https://arxiv.org/pdf/2203.15937.pdf
@@ -608,15 +615,62 @@ Exiting...
         """
         prefix = f"mdd/{split}-"
 
-        metrics = [
-            "loss",
-            "per",
-            "corr_diag_pct",
-            "err_diag_pct",
-            "f1_score",
-            "precision",
-            "recall",
-        ]
+        avg_metrics = {
+            metric: (torch.FloatTensor(records[metric]).mean().item())
+            for metric in [
+                "loss",
+                "per",
+                "corr_diag_pct",
+                "err_diag_pct",
+                "f1_score",
+                "precision",
+                "recall",
+            ]
+            if metric in records
+        }
+
+        sum_metrics = {
+            metric: (
+                torch.FloatTensor(records[metric]).sum().item()
+                if metric in records
+                else 0
+            )
+            for metric in [
+                "insertions",
+                "deletions",
+                "substitutions",
+                "num_ref_tokens",
+                "tp",
+                "fp",
+                "tn",
+                "fn",
+            ]
+        }
+
+        if "tp" in records and "tn" in records and "fp" in records and "fn" in records:
+            sum_metrics["global-precision"] = sum_metrics["tp"] / (
+                max(1, sum_metrics["tp"] + sum_metrics["fp"])
+            )
+            sum_metrics["global-recall"] = sum_metrics["tp"] / (
+                max(1, sum_metrics["tp"] + sum_metrics["fn"])
+            )
+            precision = sum_metrics["global-precision"]
+            recall = sum_metrics["global-recall"]
+            sum_metrics["global-f1-score"] = (
+                2 * precision * recall / (max(1, precision + recall))
+            )
+
+        if (
+            "insertions" in records
+            and "substitutions" in records
+            and "deletions" in records
+            and "num_ref_tokens" in records
+        ):
+            sum_metrics["global-per"] = (
+                sum_metrics["insertions"]
+                + sum_metrics["substitutions"]
+                + sum_metrics["deletions"]
+            ) / (max(1, sum_metrics["num_ref_tokens"]))
 
         message_parts = [
             prefix,
@@ -625,13 +679,15 @@ Exiting...
 
         avg_loss = torch.FloatTensor(records["loss"]).mean().item()
 
-        for metric in metrics:
-            if metric in records:
-                avg_metric = torch.FloatTensor(records[metric]).mean().item()
-                logger.add_scalar(
-                    f"{prefix}{metric}", avg_metric, global_step=global_step
-                )
-                message_parts.append(f"{metric}:{avg_metric}")
+        for metric, avg_metric in avg_metrics.items():
+            logger.add_scalar(f"{prefix}{metric}", avg_metric, global_step=global_step)
+            message_parts.append(f"{metric}:{avg_metric}")
+
+        for metric, total_metric in sum_metrics.items():
+            logger.add_scalar(
+                f"{prefix}{metric}", total_metric, global_step=global_step
+            )
+            message_parts.append(f"{metric}:{total_metric}")
 
         message_parts.append("\n")
         message = "|".join(message_parts)
