@@ -10,6 +10,8 @@ from .rnn import RNNEncoder, SuperbDiarizationModel
 from .speaker_loss import amsoftmax, softmax
 from .speaker_model import SuperbXvector, XVectorBackbone
 from .upstream import Featurizer, S3PRLUpstream
+# from .KAN import KAN
+from .efficientkan import KAN
 
 __all__ = [
     "S3PRLUpstream",
@@ -28,4 +30,5 @@ __all__ = [
     "SuperbXvector",
     "XVectorBackbone",
     "BeamDecoder",
+    "KAN",
 ]

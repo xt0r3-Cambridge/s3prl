@@ -17,6 +17,7 @@
 import os
 import math
 import random
+import einops
 import yaml
 from collections import defaultdict, Counter
 from typing import Dict, List
@@ -91,6 +92,8 @@ class DownstreamExpert(nn.Module):
         self.logging = Path(expdir) / "log.log"
         self.verbose_log = Path(expdir) / "verbose_log.log"
         self.best = defaultdict(lambda: 0)
+
+
 
     # Interface
     def get_dataloader(self, split):
@@ -493,10 +496,22 @@ Exiting...
         # print(features)
         feature_lengths = torch.LongTensor([len(l) for l in features])
         features = pad_sequence(features, padding_value=self.arpa_phones["<eps>"])
+        if self.modelrc.get("extractor_type") == "KAN":
+            features_shape = features.shape
+            features = einops.rearrange(features, "time batch len -> (time batch) len")
 
         # We make the predictions with the fine-tuned models using the
         # upstream features
         pred_phone_logits = self.mdd_model(features)
+
+        if self.modelrc.get("extractor_type") == "KAN":
+            pred_phone_logits = einops.rearrange(
+                pred_phone_logits,
+                "(time batch) len -> time batch len",
+                time=features_shape[0],
+                batch=features_shape[1],
+            )
+
         pred_phone_logprobs = log_softmax(pred_phone_logits, dim=-1)
 
         # Compute the CTC loss
@@ -702,3 +717,7 @@ Exiting...
             f.write(message)
 
         return save_ckpt
+
+    # def to(self, device, *args, **kwargs):
+    #     self.mdd_model = self.mdd_model.to(device)
+    #     super(DownstreamExpert, self).to(device, *args, **kwargs)
