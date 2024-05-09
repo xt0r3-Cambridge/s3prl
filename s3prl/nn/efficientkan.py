@@ -1,4 +1,4 @@
-# Code from https://github.com/Blealtan/efficient-kan/blob/master/src/efficient_kan/kan.py 
+# Code from https://github.com/Blealtan/efficient-kan/blob/master/src/efficient_kan/kan.py
 import torch
 import torch.nn.functional as F
 import math
@@ -55,7 +55,9 @@ class KANLinear(torch.nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        torch.nn.init.kaiming_uniform_(self.base_weight, a=math.sqrt(5) * self.scale_base)
+        torch.nn.init.kaiming_uniform_(
+            self.base_weight, a=math.sqrt(5) * self.scale_base
+        )
         with torch.no_grad():
             noise = (
                 (
@@ -74,7 +76,9 @@ class KANLinear(torch.nn.Module):
             )
             if self.enable_standalone_scale_spline:
                 # torch.nn.init.constant_(self.spline_scaler, self.scale_spline)
-                torch.nn.init.kaiming_uniform_(self.spline_scaler, a=math.sqrt(5) * self.scale_spline)
+                torch.nn.init.kaiming_uniform_(
+                    self.spline_scaler, a=math.sqrt(5) * self.scale_spline
+                )
 
     def b_splines(self, x: torch.Tensor):
         """
@@ -245,10 +249,14 @@ class KAN(torch.nn.Module):
         base_activation=torch.nn.SiLU,
         grid_eps=0.02,
         grid_range=[-1, 1],
+        enable_layer_norm=True,
+        layer_norm_eps=1e-5,
     ):
         super(KAN, self).__init__()
         self.grid_size = grid_size
         self.spline_order = spline_order
+        self.enable_layer_norm = enable_layer_norm
+        self.layer_norm_eps = layer_norm_eps
 
         self.layers = torch.nn.ModuleList()
         for in_features, out_features in zip(layers_hidden, layers_hidden[1:]):
@@ -272,6 +280,10 @@ class KAN(torch.nn.Module):
             if update_grid:
                 layer.update_grid(x)
             x = layer(x)
+            if self.enable_layer_norm:
+                x = (x - x.mean(-1, keepdim=True)) / torch.sqrt(
+                    self.layer_norm_eps + x.var(-1, keepdim=True, unbiased=False)
+                )
         return x
 
     def regularization_loss(self, regularize_activation=1.0, regularize_entropy=1.0):
